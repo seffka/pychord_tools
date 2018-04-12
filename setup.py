@@ -8,5 +8,9 @@ setup(
     license='',
     author='Vsevolod Eremenko',
     author_email='',
-    description=''
+    description='',
+    install_requires = [
+        'essentia',
+        'numpy'
+    ],
 )
