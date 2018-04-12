@@ -48,15 +48,16 @@ def smooth(x, window_len=11, window='hanning'):
         y[:, i] = np.convolve(w / w.sum(), s, mode='valid')[start:end]
     return y
 
-SMOOTHING_TIME = 0.2
-def smoothChroma(chroma, hopSize = 4096, fs = 44100):
+SMOOTHING_TIME = 0.3
+
+def smoothChroma(chroma, hopSize = 2048, fs = 44100):
     '''
     Smooth chroma features by convolving each of 12 chroma sequences with hanning window.
     '''
     return smooth(chroma, window_len=int(SMOOTHING_TIME * fs / hopSize), window='hanning').astype(
                          'float32')
 
-def loadChroma(filename, frameSize = 16384, tuningFreq=440, hopSize = 4096):
+def loadChroma(filename, frameSize = 16384, tuningFreq=440, hopSize = 2048):
     '''
     Extract HPCP chroma features with essentia
     Parameters
@@ -83,6 +84,17 @@ def loadChroma(filename, frameSize = 16384, tuningFreq=440, hopSize = 4096):
                                       minFrequency=40,
                                       maxFrequency=5000,
                                       maxPeaks=10000)
+    hpcp = esstr.HPCP(size=12,
+                referenceFrequency = tuningFreq,
+                harmonics = 8,
+                bandPreset = True,
+                minFrequency = 40.0,
+                maxFrequency = 5000.0,
+                bandSplitFrequency = 500.0,
+                weightType = "cosine",
+                nonLinear = True,
+                windowSize = 1.0)
+    """
     hpcp = esstr.HPCP(
         size=12,
         referenceFrequency = tuningFreq,
@@ -94,6 +106,7 @@ def loadChroma(filename, frameSize = 16384, tuningFreq=440, hopSize = 4096):
         weightType = "cosine",
         nonLinear = False,
         windowSize = 1.0)
+    """
     pool = essentia.Pool()
     # connect algorithms together
     loader.audio >> framecutter.signal
@@ -120,8 +133,8 @@ def chordsByBeats(fileName, beats):
     :param beats:
     :return:
     '''
-    #chords = ChordsDetectionBeats(hopSize=4096, chromaPick='interbeat_median')
-    chords = ChordsDetectionBeats(hopSize=4096, chromaPick='first_beat')
-    chroma = loadChroma(fileName, hopSize=4096)
+    #chords = ChordsDetectionBeats(hopSize=2048, chromaPick='interbeat_median')
+    chords = ChordsDetectionBeats(hopSize=2048, chromaPick='first_beat')
+    chroma = loadChroma(fileName, hopSize=2048)
     syms, strengths = chords(chroma, beats)
     return convertChordLabels(syms), strengths
