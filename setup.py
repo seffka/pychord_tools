@@ -10,7 +10,6 @@ setup(
     author_email='',
     description='',
     install_requires = [
-        'essentia',
         'numpy'
     ],
 )
