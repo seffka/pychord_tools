@@ -10,4 +10,4 @@ with minimal external dependencies.
      plugin: http://isophonics.net/nnls-chroma
      how to install: https://www.vamp-plugins.org/download.html#install
    * use pip:
-     pip install git+https://github.com/MTG/pychord_detection.git 
+     pip install git+https://github.com/MTG/pychord_tools.git 
