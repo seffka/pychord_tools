@@ -7,20 +7,23 @@ import numpy as np
 
 from pychord_tools import chordsByBeats
 from pychord_tools.lowLevelFeatures import HPCPChromaEstimator
+from pychord_tools.third_party import NNLSChromaEstimator
+from pychord_tools.lowLevelFeatures import SmoothedStartingBeatChromaEstimator
 
-STRENGTH_THRESHOLD = 0.1
-def mostLikelyIndices(strengths, syms, expected):
-    s = np.argwhere(strengths > STRENGTH_THRESHOLD)
+def mostLikelySegment(strengths, syms, expected, strngth_threshold = -2.5):
+    s = np.argwhere(strengths > strngth_threshold)
     s = s.reshape(s.size)
     if len(s) == 0:
-        return None
+        return None, 0
     start = s[0]
     mismatch=[]
     indices=[]
     for i in range(start, len(syms) - len(expected) + 1):
         mismatch.append(np.sum(expected != syms[i:i+len(expected)]))
         indices.append([i, i+len(expected)])
-    return indices[np.argmin(mismatch)], np.min(mismatch)
+    mostLikelySegment = indices[np.argmin(mismatch)]
+    return mostLikelySegment, np.min(mismatch)
+
 
 def extractTuningAndDuration(infile):
     chordHopSize = 2048
@@ -70,10 +73,19 @@ def makeChordStrings(chords):
 
     return '|' + '|'.join(res) + '|'
 
-def makeJSONAnnotaton(expectedChords, audioFile, jsonFile, beats, uid = None, chromaEstimator = HPCPChromaEstimator()):
+def makeJSONAnnotaton(
+        expectedChords,
+        audioFile,
+        jsonFile,
+        beats,
+        chromaPatternModel,
+        uid = None,
+        chromaEstimator=NNLSChromaEstimator(),
+        segmentChromaEstimator=SmoothedStartingBeatChromaEstimator(smoothingTime=0.6),
+        additionalAttributes = dict()):
     syms, strengths = chordsByBeats(
-        audioFile, beats, chromaEstimator=chromaEstimator, smoothingTime=0.3, chromaPick='starting_beat')
-    segment, mismatch = mostLikelyIndices(strengths, syms, expectedChords)
+        audioFile, beats, chromaPatternModel, chromaEstimator=chromaEstimator, segmentChromaEstimator=segmentChromaEstimator)
+    segment, mismatch = mostLikelySegment(strengths, syms, expectedChords)
     beats = beats[segment[0]:segment[1]]
     tuning, duration = extractTuningAndDuration(audioFile)
     entry = {}
@@ -85,7 +97,8 @@ def makeJSONAnnotaton(expectedChords, audioFile, jsonFile, beats, uid = None, ch
     entry['metre'] = '4/4'
     entry['duration'] = round(float(duration), 2)
     pathname = os.path.abspath(audioFile)
-    entry['sandbox'] = {'path': pathname, 'transcriptions': [], 'key': []}
+    entry['sandbox'] = {'path': pathname, 'mismatch': int(mismatch), 'transcriptions': [], 'key': []}
+    entry['sandbox'].update(additionalAttributes)
     part = {}
     part['name'] = 'chorus 1'
     part['beats'] = beats.tolist()

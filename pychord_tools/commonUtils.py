@@ -1,6 +1,16 @@
 import json
 import re
 
+def convertChordLabels(syms) :
+    # "minor" to Harte syntax, resolve enharmonicity in "jazz" style.
+    res = [re.sub('m$', ':min', s) for s in syms]
+    res = [re.sub('Gb', 'F#', s) for s in res]
+    res = [re.sub('A#', 'Bb', s) for s in res]
+    res = [re.sub('C#', 'Db', s) for s in res]
+    res = [re.sub('D#', 'Eb', s) for s in res]
+    res = [re.sub('G#', 'Ab', s) for s in res]
+    return res
+
 def loadFileList(listFileName):
     result = []
     with open(listFileName) as list_file:
@@ -104,7 +114,6 @@ def toBeatChordSegmentList(startTime, endTime, beats, symbols) :
             res.append(ChordSegment(beats[i], beats[i + 1], sym))
         else:
             print("wrong beats order: " + str(beats[i]) + ", " + str(beats[i + 1]))
-        #    raise ValueError("wrong beats order: " + str(onsets[i]) + ", " + str(onsets[i+1]))
     if (res[-1].endTime < endTime) :
         res.append(ChordSegment(res[-1].endTime, endTime, 'N'))
     return res

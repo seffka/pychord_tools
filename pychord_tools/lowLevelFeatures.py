@@ -6,9 +6,13 @@ import re
 import os.path as path
 import pychord_tools.commonUtils as commonUtils
 import pychord_tools.cacher as cacher
+from pychord_tools.commonUtils import convertChordLabels
 
 import essentia
 import essentia.streaming as esstr
+
+PITCH_CLASS_NAMES = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
+DEGREES=['I', 'IIb', 'II', 'IIIb', 'III', 'IV', 'Vb', 'V', 'VIb', 'VI', 'VIIb', 'VII']
 
 pitches = {'C':0, 'D':2, 'E':4, 'F':5, 'G':7, 'A':9, 'B':11}
 alt={'b':-1, '#':1}
@@ -34,6 +38,17 @@ class ChromaSegments(BeatSegments):
         BeatSegments.__init__(self, startTimes, durations)
 
 
+class PitchedPattern:
+    def __init__(self, kind, pitchClass = None, pitchClassIndex = 0):
+        self.kind = kind
+        if pitchClass != None :
+            self.pitchClassIndex = PITCH_CLASS_NAMES.index(convertChordLabels(pitchClass))
+        else:
+            self.pitchClassIndex = pitchClassIndex
+    def __repr__(self):
+        return PITCH_CLASS_NAMES[self.pitchClassIndex] + ':' + self.kind
+
+
 class AnnotatedChromaSegments(ChromaSegments):
     def __init__(self, labels, pitches, kinds, chromas, uids, startTimes, durations):
         self.labels = labels
@@ -41,6 +56,15 @@ class AnnotatedChromaSegments(ChromaSegments):
         self.kinds = kinds
         self.uids = uids
         ChromaSegments.__init__(self, chromas, startTimes, durations)
+
+    def pitchedPatterns(self):
+        if (len(self.kinds) != len(self.pitches)):
+            raise ValueError("kinds and pitches vectors need to be equal size.")
+        res = np.empty((len(self.pitches)), dtype='object')
+        for i in range(len(self.pitches)):
+            res[i] = PitchedPattern(self.kinds[i], pitchClassIndex=self.pitches[i])
+        return res
+
 
 ######################################################################
 # Interfaces
@@ -69,16 +93,23 @@ class SegmentChromaEstimator:
     def fillSegmentsWithChroma(self, beatSegments, chroma):
         pass
 
+    def getChromaByBeats(self, beats, chroma):
+        pass
+
 
 class LabelTranslator:
     def labelToPitchAndKind(self, label):
         pass
+
 
 class UidAndAudioPathExtractor:
     def uidAndAudioPathName(self, annotationFileName):
         pass
 
 ######################################################################
+
+def degreeIndices(degreeNameList):
+    return [DEGREES.index(e) for e in degreeNameList]
 
 def smooth(x, window_len=11, window='hanning'):
     '''Smooth the data using a window with requested size.
@@ -106,11 +137,11 @@ def smooth(x, window_len=11, window='hanning'):
     y = np.zeros(x.shape)
     for i in range(np.size(x,1)):
       if np.size(x, 0) < window_len:
-          raise(ValueError, "Input vector needs to be bigger than window size.")
+          raise ValueError("Input vector needs to be bigger than window size.")
       if window_len < 3:
           return x
       if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-          raise(ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
+          raise ValueError("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
       xx = x[:, i]
       s = np.r_[xx[window_len - 1:0:-1], xx, xx[-1:-window_len:-1]]
       # print(len(s))
@@ -319,17 +350,28 @@ class SmoothedStartingBeatChromaEstimator(SegmentChromaEstimator):
         super().__init__(frameSize, hopSize, sampleRate)
         self.smoothingTime = smoothingTime
 
+    def fill(self, beats, chroma, smoothedChromas):
+        for i in range(len(beats)):
+            s = int(float(beats[i]) *
+                    self.sampleRate / self.hopSize)
+            smoothedChromas[i] = chroma[s]
+
     def fillSegmentsWithChroma(self, segments, chroma):
         chroma = smooth(
             chroma,
             window_len=int(self.smoothingTime * self.sampleRate / self.hopSize),
             window='hanning').astype('float32')
-        segments.chromas = np.zeros((len(segments.durations), 12), dtype='float32')
-        for i in range(len(segments.startTimes)):
-            s = int(float(segments.startTimes[i]) *
-                    self.sampleRate / self.hopSize)
-            segments.chromas[i] = chroma[s]
+        segments.chromas = np.zeros((len(segments.startTimes), 12), dtype='float32')
+        self.fill(segments.startTimes, chroma, segments.chromas)
 
+    def getChromaByBeats(self, beats, chroma):
+        chroma = smooth(
+            chroma,
+            window_len=int(self.smoothingTime * self.sampleRate / self.hopSize),
+            window='hanning').astype('float32')
+        res = np.zeros((len(beats), 12), dtype='float32')
+        self.fill(beats, chroma, res)
+        return res
 
 class AnnotatedBeatChromaEstimator:
     def __init__(self,

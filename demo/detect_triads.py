@@ -3,11 +3,13 @@
 #
 import numpy as np
 
-from pychord_tools import chordsByBeats
-from pychord_tools.lowLevelFeatures import HPCPChromaEstimator
+from pychord_tools import chordsByBeats, essentiaChordsByBeats
+from pychord_tools.lowLevelFeatures import HPCPChromaEstimator, SmoothedStartingBeatChromaEstimator
 from pychord_tools.third_party import NNLSChromaEstimator
+from pychord_tools.models import loadModel, CosineSimilarityBinaryPatternModel
+import pychord_tools, os
 
-majorFile = 'demo/audio/maj35fromE.mp3'
+majorFile = 'audio/maj35fromE.mp3'
 majorBeats = np.array([
         2.68, 3.35, 4.05, 4.74, 5.48, 6.12, 6.81, 7.52, 8.2, 8.84, 9.54, 10.24, 10.9, 11.59, 12.32, 13.03, 13.68, 14.36, 14.98, 15.68, 16.31, 16.96, 17.66, 18.4,
         19.1, 19.79, 20.44, 21.15, 21.8, 22.51, 23.16, 23.87, 24.53, 25.19, 25.9, 26.61, 27.29, 27.98, 28.64, 29.34, 29.98, 30.66, 31.28, 32.01, 32.7, 33.35, 34.05, 34.77,
@@ -18,12 +20,20 @@ majorExpected = np.array(['E', 'N', 'A', 'N', 'D', 'N', 'G', 'N', 'C', 'N', 'F',
           'E', 'N', 'A', 'N', 'D', 'N', 'G', 'N', 'C', 'N', 'F', 'N', 'Bb', 'N', 'Eb', 'N', 'Ab', 'N', 'Db', 'N', 'F#', 'N', 'B', 'N',
           'E', 'N', 'A', 'N', 'D', 'N', 'G', 'N', 'C', 'N', 'F', 'N', 'Bb', 'N', 'Eb', 'N', 'Ab', 'N', 'Db', 'N', 'F#', 'N', 'B', 'N',
           'E', 'N', 'A', 'N', 'D', 'N', 'G', 'N', 'C', 'N', 'F', 'N', 'Bb', 'N', 'Eb', 'N', 'Ab', 'N', 'N', 'N', 'N', 'N'])
-minorFile = 'demo/audio/min35fromE.mp3'
+minorFile = 'audio/min35fromE.mp3'
 minorBeats = np.array([2.67, 3.38, 4.05, 4.77, 5.45, 6.17, 6.86, 7.52, 8.13, 8.82, 9.53, 10.23, 10.89, 11.56, 12.22, 12.85, 13.53, 14.25, 14.93, 15.62, 16.29, 16.97, 17.69, 18.37, 19.07, 19.77], dtype = 'float32')
 minorExpected = np.array(['E:min', 'N', 'A:min', 'N', 'D:min', 'N', 'G:min', 'N', 'C:min', 'N', 'F:min', 'N', 'Bb:min', 'N', 'Eb:min', 'N', 'Ab:min', 'N', 'Db:min', 'N', 'F#:min', 'N', 'B:min', 'N', 'N'])
 
-def getMatches(file, beats, expected, chromaEstimator = HPCPChromaEstimator(), smoothingTime = 0.3, chromaPick='starting_beat'):
-    syms, strengths = chordsByBeats(file,  beats, chromaEstimator, smoothingTime = smoothingTime, chromaPick = chromaPick)
+def getMatches(file, beats, expected, chromaPatternModel,
+                       chromaEstimator = NNLSChromaEstimator(),
+        segmentChromaEstimator = SmoothedStartingBeatChromaEstimator(smoothingTime=0.6)):
+    syms, strengths = chordsByBeats(
+        fileName=file,
+        beats=beats,
+        chromaPatternModel=chromaPatternModel,
+        chromaEstimator=chromaEstimator,
+        segmentChromaEstimator=segmentChromaEstimator)
+
     matches = np.array(syms) == expected
 
     badIndexes = np.where(matches == False)
@@ -34,10 +44,36 @@ def getMatches(file, beats, expected, chromaEstimator = HPCPChromaEstimator(), s
         print(beats[i], ':', expected[i], '!=', syms[i])
     return syms, strengths, matches
 
-def runTest(chromaEstimator = HPCPChromaEstimator(), smoothingTime = 0.3, chromaPick='starting_beat'):
+def runTest(chromaPatternModel,
+            chromaEstimator = NNLSChromaEstimator(),
+            segmentChromaEstimator = SmoothedStartingBeatChromaEstimator(smoothingTime=0.6)):
     majSyms, majStrengths, majMatches = getMatches(
-        majorFile,  majorBeats, majorExpected, chromaEstimator, smoothingTime = smoothingTime, chromaPick = chromaPick)
+        majorFile,  majorBeats[0:-1], majorExpected, chromaPatternModel, chromaEstimator, segmentChromaEstimator)
     minSyms, minStrengths, minMatches = getMatches(
+        minorFile,  minorBeats[0:-1], minorExpected, chromaPatternModel, chromaEstimator, segmentChromaEstimator)
+
+    majMatches = majMatches[np.where(majorExpected != 'N')]
+    minMatches = minMatches[np.where(minorExpected != 'N')]
+    accuracy = 100.0 * (sum(majMatches) + sum(minMatches))/(len(majMatches) + len(minMatches))
+    print("Accuracy on non N.C. chords: %.2f %%" % accuracy)
+    return accuracy
+
+def getMatchesEssentia(file, beats, expected, chromaEstimator = HPCPChromaEstimator(), smoothingTime = 0.3, chromaPick='starting_beat'):
+    syms, strengths = essentiaChordsByBeats(file,  beats, chromaEstimator, smoothingTime = smoothingTime, chromaPick = chromaPick)
+    matches = np.array(syms) == expected
+
+    badIndexes = np.where(matches == False)
+    notN = np.where(expected != 'N')
+    badIndexes = np.intersect1d(badIndexes, notN)
+    print(badIndexes)
+    for i in badIndexes:
+        print(beats[i], ':', expected[i], '!=', syms[i])
+    return syms, strengths, matches
+
+def runTestEssentia(chromaEstimator = HPCPChromaEstimator(), smoothingTime = 0.3, chromaPick='starting_beat'):
+    majSyms, majStrengths, majMatches = getMatchesEssentia(
+        majorFile,  majorBeats, majorExpected, chromaEstimator, smoothingTime = smoothingTime, chromaPick = chromaPick)
+    minSyms, minStrengths, minMatches = getMatchesEssentia(
         minorFile,  minorBeats, minorExpected, chromaEstimator, smoothingTime = smoothingTime, chromaPick = chromaPick)
 
     majMatches = majMatches[np.where(majorExpected != 'N')]
@@ -48,19 +84,47 @@ def runTest(chromaEstimator = HPCPChromaEstimator(), smoothingTime = 0.3, chroma
 
 # Testing different chroma algorithms and smoothing windows. Accuracy:  80.7% -> 100%
 print('"Old" essentia approach (HPCP, interbeat median, no preliminary smoothing)')
-runTest(smoothingTime = 0.0, chromaPick='interbeat_median')
+runTestEssentia(smoothingTime = 0.0, chromaPick='interbeat_median')
 
 print('HPCP, interbeat median, smoothing: 0.7')
-runTest(smoothingTime = 0.7, chromaPick='interbeat_median')
+runTestEssentia(smoothingTime = 0.7, chromaPick='interbeat_median')
 
 print('HPCP, starting_beat, smoothing: 0.3')
-runTest(smoothingTime = 0.3, chromaPick='starting_beat')
+runTestEssentia(smoothingTime = 0.3, chromaPick='starting_beat')
 
 print('NNLS, starting_beat, smoothing: 0.3')
-runTest(chromaEstimator = NNLSChromaEstimator(), smoothingTime = 0.3, chromaPick='starting_beat')
+runTestEssentia(chromaEstimator = NNLSChromaEstimator(), smoothingTime = 0.3, chromaPick='starting_beat')
+
+print('NNLS, starting_beat, smoothing: 0.6')
+runTestEssentia(chromaEstimator = NNLSChromaEstimator(), smoothingTime = 0.6, chromaPick='starting_beat')
 
 print('NNLS, starting_beat, smoothing: 3.0')
-runTest(chromaEstimator = NNLSChromaEstimator(), smoothingTime = 3.0, chromaPick='starting_beat')
+runTestEssentia(chromaEstimator = NNLSChromaEstimator(), smoothingTime = 3.0, chromaPick='starting_beat')
+
+# Probabilistic pattern matching
+model = loadModel(os.path.join(pychord_tools.__path__[0], 'clnm.pkl'))
+print('Probabilistic pattern matching, NNLS, smoothing: 0.6')
+runTest(model)
+
+# Compare to essentia
+cosm = CosineSimilarityBinaryPatternModel({'maj':['I', 'III', 'V'], 'min':['I', 'IIIb', 'V']}, {'maj': '', 'min': ':min'})
+
+runTest(cosm)
+esyms, estrengths = essentiaChordsByBeats(
+    majorFile, majorBeats, NNLSChromaEstimator(),
+    0.6,
+    chromaPick='starting_beat')
+
+syms, strengths = chordsByBeats(
+    fileName=majorFile,
+    beats=majorBeats,
+    chromaPatternModel=cosm,
+    chromaEstimator=NNLSChromaEstimator())
+
+beatsChromas = SmoothedStartingBeatChromaEstimator(smoothingTime=0.6).getChromaByBeats(majorBeats, NNLSChromaEstimator().estimateChroma(majorFile))
+p, strengths = cosm.predict(beatsChromas)
+unnorm_strengths = np.exp(cosm.logUtilitiesGivenSequence(beatsChromas, p))
+
 """
 accuracies = []
 smoothing = []

@@ -7,8 +7,7 @@ from matplotlib.collections import PatchCollection
 import numpy as np
 from scipy.stats import beta
 from pychord_tools.compositionalData import amalgamate
-
-degrees=['I', 'IIb', 'II', 'IIIb', 'III', 'IV', 'Vb', 'V', 'VIb', 'VI', 'VIIb', 'VII']
+from lowLevelFeatures import DEGREES
 
 class TernaryDensity :
     def __init__(self, steps = 10):
@@ -83,7 +82,7 @@ class TernaryDensity :
 
 def degreesTernaryPlot(ax, chroma, d1, d2, d3, stepsResilution = 50,
                            x0 = 0.5, y0 = math.sqrt(3)/2, angle = 2 * math.pi / 3.0, gap=0.0):
-    d = preprocessing.normalize(chroma[:, (degrees.index(d1), degrees.index(d2), degrees.index(d3))], norm='l1')
+    d = preprocessing.normalize(chroma[:, (DEGREES.index(d1), DEGREES.index(d2), DEGREES.index(d3))], norm='l1')
     t = TernaryDensity(stepsResilution)
     for x in d:
         t.addPoint(x[0], x[1], x[2])
@@ -158,21 +157,21 @@ def plotDimHexagram(ax, chroma, step = 30, gap = 0.005, labelSize = 12):
 # sort chord/scale degrees according to method ('mean', 'entropy', 'beta-likelihood')
 def sortedDegrees(chromas, method='mean', flip = False, convertToIndices=False):
     av = np.mean(chromas, axis=0)
-    t = np.empty(len(degrees), dtype=[('degree', object), ('entropy', float), ('mean', float), ('beta-likelihood', float)])
-    for i in range(len(degrees)):
+    t = np.empty(len(DEGREES), dtype=[('degree', object), ('entropy', float), ('mean', float), ('beta-likelihood', float)])
+    for i in range(len(DEGREES)):
         partition = [i]
         a = amalgamate([partition], chromas).transpose()[0]
         params = beta.fit(a, floc=0, fscale=1)
         e = beta.entropy(*params)
         bl = beta.logpdf(a, *params).sum()
-        t[i] = (degrees[i], e, av[i], bl)
+        t[i] = (DEGREES[i], e, av[i], bl)
         #print np.array(degrees)[partition], e, av[i], ll
     t.sort(order=method)
     d = t['degree']
     if (flip):
         d = np.flip(d, axis=0)
     if (convertToIndices):
-        return [degrees.index(x) for x in d]
+        return [DEGREES.index(x) for x in d]
     else:
         return d
 

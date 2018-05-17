@@ -15,7 +15,7 @@ from pychord_tools.compositionalData import subcomposition
 from pychord_tools.compositionalData import substituteZeros
 from pychord_tools.lowLevelFeatures import AnnotatedBeatChromaEstimator
 from pychord_tools.lowLevelFeatures import SmoothedStartingBeatChromaEstimator
-from pychord_tools.plots import degrees
+from pychord_tools.lowLevelFeatures import DEGREES, degreeIndices
 from pychord_tools.third_party import NNLSChromaEstimator
 
 chromaEstimator = AnnotatedBeatChromaEstimator(
@@ -27,7 +27,7 @@ segments = chromaEstimator.loadChromasForAnnotationFileListFile('correct.txt')
 dmaj = preprocessing.normalize(substituteZeros(segments.chromas[segments.kinds == 'maj']), norm='l1')
 dmin = preprocessing.normalize(substituteZeros(segments.chromas[segments.kinds == 'min']), norm='l1')
 
-dMaj = pd.DataFrame(data=dmaj, columns=degrees)
+dMaj = pd.DataFrame(data=dmaj, columns=DEGREES)
 sns.violinplot(data=dMaj, inner="point")
 plt.show()
 
@@ -39,8 +39,9 @@ plt.show()
 # Beta
 fig, ax = plt.subplots(1,2)
 majPartition = [
-    [degrees.index('I'), degrees.index('III'), degrees.index('V')],
-    [degrees.index('II'), degrees.index('VII'), degrees.index('IIb'), degrees.index('IIIb'), degrees.index('IV'), degrees.index('Vb'), degrees.index('VIb'), degrees.index('VI'), degrees.index('VIIb')]]
+    degreeIndices(['I', 'III', 'V']),
+    degreeIndices(['II', 'VII', 'IIb','IIIb']),
+    degreeIndices(['IV', 'Vb', 'VIb', 'VI', 'VIIb'])]
 pmaj = amalgamate(majPartition, dmaj).transpose()[0]
 params = beta.fit(pmaj, floc=0, fscale=1)
 ax[0].hist(pmaj, 12, normed=True)
@@ -56,7 +57,7 @@ ax[1].plot(x, rv.cdf(x), lw=2)
 plt.show()
 
 # log normal
-chordChroma = subcomposition([[degrees.index('I')], [degrees.index('V')], [degrees.index('III')]],
+chordChroma = subcomposition([[DEGREES.index('I')], [DEGREES.index('V')], [DEGREES.index('III')]],
     dmaj)
 vectors = np.apply_along_axis(alr, 1, chordChroma)
 gmm = GaussianMixture(
@@ -74,7 +75,7 @@ plots.ternaryPlot(ax[1], genChroma, 12)
 plt.show()
 
 # Dirichlet
-outChroma = subcomposition([[degrees.index('IIb')], [degrees.index('IIIb')], [degrees.index('IV')], [degrees.index('Vb')], [degrees.index('VIb')], [degrees.index('VI')], [degrees.index('VIIb')]],
+outChroma = subcomposition([[DEGREES.index('IIb')], [DEGREES.index('IIIb')], [DEGREES.index('IV')], [DEGREES.index('Vb')], [DEGREES.index('VIb')], [DEGREES.index('VI')], [DEGREES.index('VIIb')]],
                              dmaj).astype('float64')
 alphas = np.arange(0.1, 2.0, 0.1)
 ss = []
@@ -98,7 +99,7 @@ plt.show()
 ##############################################
 
 
-pmaj = amalgamate([[degrees.index('I'), degrees.index('III'), degrees.index('V')]], dmaj)[0]
+pmaj = amalgamate([[DEGREES.index('I'), DEGREES.index('III'), DEGREES.index('V')]], dmaj)[0]
 sns.distplot(pmaj)
 plt.show()
 
@@ -110,7 +111,7 @@ h = plt.plot(x, rv.pdf(x), lw=2)
 h = plt.plot(x, rv.cdf(x), lw=2)
 plt.show()
 
-minPartition = [degrees.index('I'), degrees.index('IIIb'), degrees.index('V')]
+minPartition = degreeIndices(['I', 'IIIb', 'V'])
 pmin = amalgamate([minPartition], dmin)[0]
 sns.distplot(pmin)
 plt.show()
@@ -162,18 +163,18 @@ plt.show()
 d = plots.sortedDegrees(dmaj, flip=True)
 print(d)
 majPartition = [
-    [degrees.index('I'), degrees.index('III'), degrees.index('V')],
-    [degrees.index('II'), degrees.index('VII')],
-    [degrees.index('IIb'), degrees.index('IIIb'), degrees.index('IV'), degrees.index('Vb'), degrees.index('VIb'), degrees.index('VI'), degrees.index('VIIb')]]
+    [DEGREES.index('I'), DEGREES.index('III'), DEGREES.index('V')],
+    [DEGREES.index('II'), DEGREES.index('VII')],
+    [DEGREES.index('IIb'), DEGREES.index('IIIb'), DEGREES.index('IV'), DEGREES.index('Vb'), DEGREES.index('VIb'), DEGREES.index('VI'), DEGREES.index('VIIb')]]
 pmaj = amalgamate(majPartition, dmaj)
 fig, ax = plt.subplots()
 plots.ternaryPlot(ax, pmaj, 30)
 plt.show()
 
 minPartition = [
-    [degrees.index('I'), degrees.index('IIIb'), degrees.index('V')],
-    [degrees.index('II'), degrees.index('VIIb')],
-    [degrees.index('IIb'), degrees.index('III'), degrees.index('IV'), degrees.index('Vb'), degrees.index('VIb'), degrees.index('VI'), degrees.index('VII')]]
+    [DEGREES.index('I'), DEGREES.index('IIIb'), DEGREES.index('V')],
+    [DEGREES.index('II'), DEGREES.index('VIIb')],
+    [DEGREES.index('IIb'), DEGREES.index('III'), DEGREES.index('IV'), DEGREES.index('Vb'), DEGREES.index('VIb'), DEGREES.index('VI'), DEGREES.index('VII')]]
 pmin = amalgamate(minPartition, dmin)
 fig, ax = plt.subplots()
 plots.ternaryPlot(ax, pmin, 30)
@@ -188,7 +189,7 @@ plots.plotMajHexagram(ax, dmaj)
 plt.show()
 
 rmaj = subcomposition(
-    [[degrees.index('IIb')], [degrees.index('VIIb')], [degrees.index('IIIb')]],
+    [[DEGREES.index('IIb')], [DEGREES.index('VIIb')], [DEGREES.index('IIIb')]],
     dmaj)
 fig, ax = plt.subplots()
 plots.ternaryPlot(ax, rmaj, 5)
@@ -196,11 +197,10 @@ plt.show()
 
 
 overtones = subcomposition(
-    [[degrees.index('II')], [degrees.index('VII')]],
+    [[DEGREES.index('II')], [DEGREES.index('VII')]],
     dmaj).transpose()[0]
 sns.distplot(overtones)
 plt.show()
-
 
 
 params = beta.fit(overtones, floc=0, fscale=1)
@@ -212,7 +212,6 @@ h = plt.plot(x, rv.cdf(x), lw=2)
 plt.show()
 
 
-
 params = beta.fit(pmaj, floc=0, fscale=1)
 myHist = plt.hist(pmaj, 9, normed=True)
 rv = beta(*params)
@@ -221,7 +220,7 @@ h = plt.plot(x, rv.pdf(x), lw=2)
 h = plt.plot(x, rv.cdf(x), lw=2)
 plt.show()
 
-minPartition = [degrees.index('I'), degrees.index('V'), degrees.index('IIIb'), degrees.index('II'), degrees.index('VIIb')]
+minPartition = [DEGREES.index('I'), DEGREES.index('V'), DEGREES.index('IIIb'), DEGREES.index('II'), DEGREES.index('VIIb')]
 pmin = plots.estimatePartition(minPartition, dmin)
 sns.distplot(pmin)
 plt.show()
