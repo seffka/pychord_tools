@@ -16,17 +16,10 @@ from pychord_tools.lowLevelFeatures import PITCH_CLASS_NAMES
 from pychord_tools.third_party import NNLSChromaEstimator
 from scipy.misc import logsumexp
 from pychord_tools.commonUtils import convertChordLabels
+from scipy.stats import norm
 
 # pip install git+https://github.com/ericsuh/dirichlet.git
 import dirichlet
-
-def trainAlrGaussian(vectors):
-    gmm = GaussianMixture(
-        n_components=1,
-        covariance_type='full',
-        max_iter=200)
-    gmm.fit(np.apply_along_axis(alr, 1, vectors))
-    return gmm
 
 class ChromaPatternModel:
     """
@@ -50,13 +43,14 @@ class ChromaPatternModel:
     def logUtilities(self, chromas, normalize = True):
         return np.zeros((len(chromas), len(self.externalNames)))
 
-    def logUtilitiesGivenSequence(self, chromas, pitchedPatterns):
+    def logUtilitiesGivenSequence(self, chromas, pitchedPatterns, normalize = False):
         return np.zeros(len(chromas))
 
     def predictExternalLabels(self, chromas):
         lu = self.logUtilities(chromas)
         indices = np.argmax(lu, axis = 1)
-        return np.array([self.externalNames[x] for x in indices]), np.array([lu[i, indices[i]] for i in range(len(indices))])
+        return np.array([self.externalNames[x] for x in indices]),\
+               np.array([lu[i, indices[i]] for i in range(len(indices))])
 
     def predict(self, chromas):
         lu = self.logUtilities(chromas)
@@ -69,6 +63,9 @@ class ChromaPatternModel:
 
     def saveModel(self, fileName):
         joblib.dump(self, fileName)
+
+    def index(self, pitchedPattern):
+        return pitchedPattern.pitchClassIndex * self.NKinds + self.kinds.index(pitchedPattern.kind)
 
 def degrees2BinaryPattern(degreeList):
     result = np.zeros(12, dtype = 'int')
@@ -130,14 +127,20 @@ class CorrectnessBalanceResidualsModel(ChromaPatternModel):
     def __init__(self, kinds, kindToExternalNames = None):
         ChromaPatternModel.__init__(self, kinds, kindToExternalNames)
 
-    def correctness(self, chroma, pitchedPatterns):
+    def correctnessGivenSequence(self, chroma, pitchedPatterns, normalize = False):
         return
 
-    def balance(self, chroma, pitchedPatterns):
+    def balanceGivenSequence(self, chroma, pitchedPatterns, normalize = False):
         return
 
-    def residuals(self, chroma, pitchedPatterns):
+    def correctness(self, chroma, normalize = False):
         return
+
+    def balance(self, chroma, normalize = False):
+        return
+
+    def maxBalance(self):
+        return 1.0
 
 class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
     """
@@ -165,6 +168,14 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
     def preprocess(self, chroma):
         return preprocessing.normalize(substituteZeros(chroma), norm='l1')
 
+    def trainAlrGaussian(self, vectors):
+        gmm = GaussianMixture(
+            n_components=1,
+            covariance_type='full',
+            max_iter=200)
+        gmm.fit(np.apply_along_axis(alr, 1, vectors))
+        return gmm
+
     def fit(self, segments):
         """
         Fits the model to given chroma segments.
@@ -177,36 +188,33 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
             partition = [self.inDegreeDict[k], self.outDegreeDict[k]]
             inChromaSums[k] = amalgamate(partition, chroma).transpose()[0]
             inChromaComposition = subcomposition([[e] for e in self.inDegreeDict[k]], chroma)
-            self.balanceGMMs[k] = trainAlrGaussian(inChromaComposition)
+            self.balanceGMMs[k] = self.trainAlrGaussian(inChromaComposition)
             outChromaComposition = subcomposition([[e] for e in self.outDegreeDict[k]], chroma).astype('float64')
             self.residualDirichletAlphas[k] = dirichlet.mle(outChromaComposition)
 
         allChords = np.concatenate(list(inChromaSums.values()))
         self.betaParams = beta.fit(allChords, floc=0, fscale=1)
 
+    def scoreBalance(self, kind, preChromas):
+        inChromaComposition = subcomposition([[e] for e in self.inDegreeDict[kind]], preChromas)
+        return self.balanceGMMs[kind].score_samples(np.apply_along_axis(alr, 1, inChromaComposition))
+
     def logUtilities(self, chromas, normalize = True):
         lps = np.zeros((len(chromas), len(self.externalNames)))
         chromas = chromas.astype('float64')
+        distBeta = beta(*self.betaParams)
         for basePitch in range(len(PITCH_CLASS_NAMES)):
             pos = basePitch * self.NKinds
             # NOTE: log-ratio preprocessing should be applied to shifted
             # chroma, so we always do it inside loop.
             preChromas = self.preprocess(chromas)
             ki = 0
-            distBeta = beta(*self.betaParams)
             for k in self.kinds:
-                # TODO:
                 partition = [self.inDegreeDict[k], self.outDegreeDict[k]]
                 inChromaSums = amalgamate(partition, preChromas).transpose()[0]
                 inChromaComposition = subcomposition([[e] for e in self.inDegreeDict[k]], preChromas)
-                outChromaComposition = subcomposition([[e] for e in self.outDegreeDict[k]], preChromas)
                 correctness = distBeta.logcdf(inChromaSums)
                 balance = self.balanceGMMs[k].score_samples(np.apply_along_axis(alr, 1, inChromaComposition))
-                #residual = scipy.stats.dirichlet.logpdf(
-                #    outChromaComposition.transpose()[0:-1, :],
-                #    self.residualDirichletAlphas[k])
-
-                #lps[:, pos + ki] = (correctness + balance + residual)
                 lps[:, pos + ki] = (correctness + balance)
                 ki += 1
             chromas = np.roll(chromas, -1, axis=1)
@@ -216,36 +224,124 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
         else:
             return lps
 
-    def logUtilitiesGivenSequence(self, chromas, pitchedPatterns):
-        return self.correctness(chromas, pitchedPatterns) + self.balance(chromas, pitchedPatterns)
+    def correctness(self, chromas, normalize = False):
+        res = np.zeros((len(chromas), len(self.externalNames)))
+        chromas = chromas.astype('float64')
+        distBeta = beta(*self.betaParams)
+        for basePitch in range(len(PITCH_CLASS_NAMES)):
+            pos = basePitch * self.NKinds
+            # NOTE: log-ratio preprocessing should be applied to shifted
+            # chroma, so we always do it inside loop.
+            preChromas = self.preprocess(chromas)
+            ki = 0
+            for k in self.kinds:
+                partition = [self.inDegreeDict[k], self.outDegreeDict[k]]
+                inChromaSums = amalgamate(partition, preChromas).transpose()[0]
+                res[:, pos + ki] += distBeta.logcdf(inChromaSums)
+                ki += 1
+            chromas = np.roll(chromas, -1, axis=1)
+        if normalize :
+            normSum = logsumexp(res, axis=1)
+            return res - normSum[:, np.newaxis]
+        else:
+            return res
 
-    def correctness(self, chromas, pitchedPatterns):
+    def balance(self, chromas, normalize = False):
+        res = np.zeros((len(chromas), len(self.externalNames)))
+        chromas = chromas.astype('float64')
+        for basePitch in range(len(PITCH_CLASS_NAMES)):
+            pos = basePitch * self.NKinds
+            # NOTE: log-ratio preprocessing should be applied to shifted
+            # chroma, so we always do it inside loop.
+            preChromas = self.preprocess(chromas)
+            ki = 0
+            for k in self.kinds:
+                res[:, pos + ki] += self.scoreBalance(k, preChromas)
+                ki += 1
+            chromas = np.roll(chromas, -1, axis=1)
+        if normalize :
+            normSum = logsumexp(res, axis=1)
+            return res - normSum[:, np.newaxis]
+        else:
+            return res
+
+    def logUtilitiesGivenSequence(self, chromas, pitchedPatterns, normalize = False):
+        if normalize:
+            lu = self.logUtilities(chromas)
+            indices = [p.pitchClassIndex * self.NKinds + self.kinds.index(p.kind) for p in pitchedPatterns]
+            return np.array([lu[i, indices[i]] for i in range(len(indices))])
+        else:
+            return self.correctness(chromas, pitchedPatterns) + self.balance(chromas, pitchedPatterns)
+
+    def correctnessGivenSequence(self, chromas, pitchedPatterns, normalize = False):
         res = np.zeros(len(chromas))
         distBeta = beta(*self.betaParams)
         if (len(chromas) != len(pitchedPatterns)):
             raise ValueError("Input vectors need to be equal size.")
-        for i in range(len(pitchedPatterns)):
-            c = self.preprocess(np.roll(chromas[i].reshape(1,-1), -pitchedPatterns[i].pitchClassIndex))
-            k = pitchedPatterns[i].kind
-            partition = [self.inDegreeDict[k], self.outDegreeDict[k]]
-            inChromaSums = amalgamate(partition, c)[:,0]
-            res[i] = distBeta.logcdf(inChromaSums)
+        if normalize:
+            c = self.correctness(chromas, True)
+            indices = [p.pitchClassIndex * self.NKinds + self.kinds.index(p.kind) for p in pitchedPatterns]
+            return np.array([c[i, indices[i]] for i in range(len(indices))])
+        else:
+            for i in range(len(pitchedPatterns)):
+                c = self.preprocess(np.roll(chromas[i].reshape(1,-1), -pitchedPatterns[i].pitchClassIndex))
+                k = pitchedPatterns[i].kind
+                partition = [self.inDegreeDict[k], self.outDegreeDict[k]]
+                inChromaSums = amalgamate(partition, c)[:,0]
+                res[i] = distBeta.logcdf(inChromaSums)
         return res
 
-    def balance(self, chromas, pitchedPatterns):
+    def balanceGivenSequence(self, chromas, pitchedPatterns, normalize = False):
         res = np.zeros(len(chromas))
-        distBeta = beta(*self.betaParams)
         if (len(chromas) != len(pitchedPatterns)):
             raise ValueError("Input vectors need to be equal size.")
-        for i in range(len(pitchedPatterns)):
-            c = self.preprocess(np.roll(chromas[i].reshape(1,-1), -pitchedPatterns[i].pitchClassIndex))
-            k = pitchedPatterns[i].kind
-            inChromaComposition = subcomposition([[e] for e in self.inDegreeDict[k]], c)
-            res[i] = self.balanceGMMs[k].score_samples(np.apply_along_axis(alr, 1, inChromaComposition))
+        if normalize:
+            b = self.balance(chromas, True)
+            indices = [p.pitchClassIndex * self.NKinds + self.kinds.index(p.kind) for p in pitchedPatterns]
+            return np.array([b[i, indices[i]] for i in range(len(indices))])
+        else:
+            for i in range(len(pitchedPatterns)):
+                c = self.preprocess(np.roll(chromas[i].reshape(1,-1), -pitchedPatterns[i].pitchClassIndex))
+                k = pitchedPatterns[i].kind
+                res[i] = self.scoreBalance(k, c)
         return res
 
-    def residuals(self, chroma, pitchedPatterns):
-        return
+    def maxBalance(self):
+        candidates = []
+        for k in self.kinds:
+            candidates.append(self.balanceGMMs[k].score_samples(
+                self.balanceGMMs[k].means_))
+        return max(candidates)
+
+
+class IndependentPDFModel(CorrectnessLogNormBalanceModel):
+    def trainAlrGaussian(self, vectors):
+        gmm = GaussianMixture(
+            n_components=1,
+            covariance_type='diag',
+            max_iter=200)
+        gmm.fit(np.apply_along_axis(alr, 1, vectors))
+        return gmm
+
+
+class IndependentIntegralModel(IndependentPDFModel):
+    def __init__(self, kindToDegreesDict, kindToExternalNames = None):
+        IndependentPDFModel.__init__(self, kindToDegreesDict, kindToExternalNames)
+        self.ps = None
+
+    def getPs(self):
+        if (self.ps == None):
+            self.ps = dict()
+            for k in self.balanceGMMs.keys():
+                self.ps[k] = sorted(self.balanceGMMs[k].score_samples(
+                    self.balanceGMMs[k].sample(200000)[0]))
+        return self.ps
+
+    def scoreBalance(self, kind, preChromas):
+        inChromaComposition = subcomposition([[e] for e in self.inDegreeDict[kind]], preChromas)
+        pdfs = self.balanceGMMs[kind].score_samples(np.apply_along_axis(alr, 1, inChromaComposition))
+        inds = np.searchsorted(self.getPs()[kind], pdfs).astype('float32')
+        return np.log(substituteZeros(inds / len(self.getPs()[kind]), copy=False))
 
 
 class DirichletModel(ChromaPatternModel):

@@ -16,7 +16,7 @@ from pychord_tools.lowLevelFeatures import PITCH_CLASS_NAMES
 from pychord_tools.third_party import NNLSChromaEstimator
 from scipy.misc import logsumexp
 from pychord_tools.commonUtils import convertChordLabels
-from pychord_tools.models import CosineSimilarityBinaryPatternModel, CorrectnessLogNormBalanceModel, testAccuracy, DirichletModel, CorrectnessDirichletBalanceModel
+from pychord_tools.models import CosineSimilarityBinaryPatternModel, CorrectnessLogNormBalanceModel, testAccuracy, DirichletModel, CorrectnessDirichletBalanceModel, IndependentPDFModel, IndependentIntegralModel
 
 from essentia.standard import MonoLoader
 import essentia
@@ -35,6 +35,43 @@ inds = np.where(realSegments.kinds != 'unclassified')
 
 import matplotlib.pyplot as plt
 
+########################################################################################################################
+# IndependentProbabilities
+m = IndependentPDFModel({'maj':['I', 'III', 'V'], 'min':['I', 'IIIb', 'V']}, {'maj': '', 'min': ':min'})
+m.fit(segments)
+chords, lu = m.predictExternalLabels(realSegments.chromas)
+print("CorrectnessBalanceModel3:", testAccuracy(chords, realSegments))
+p, lu = m.predict(realSegments.chromas)
+c = m.correctnessGivenSequence(realSegments.chromas, p)
+b = m.balanceGivenSequence(realSegments.chromas, p)
+#b = mi.balancePDF(realSegments.chromas, pi)
+
+mi = IndependentIntegralModel({'maj':['I', 'III', 'V'], 'min':['I', 'IIIb', 'V']}, {'maj': '', 'min': ':min'})
+mi.fit(segments)
+chordsi, lui = mi.predictExternalLabels(realSegments.chromas)
+print("CorrectnessBalanceModel3:", testAccuracy(chordsi, realSegments))
+pi, lui = mi.predict(realSegments.chromas)
+ci = mi.correctnessGivenSequence(realSegments.chromas, p, normalize=True)
+uci = mi.correctnessGivenSequence(realSegments.chromas, p, normalize=False)
+bi = mi.balanceGivenSequence(realSegments.chromas, p, normalize=True)
+ubi = mi.balanceGivenSequence(realSegments.chromas, p, normalize=False)
+
+
+#plt.plot(np.exp(lui[inds]), label='lui')
+#plt.plot(np.exp(ci[inds]), label='ci')
+#plt.plot(np.exp(bi[inds]), label='bi')
+
+plt.plot(np.exp(lui[inds]), label='lui')
+plt.plot(np.exp(ci[inds]), label='norm ci')
+#plt.plot(np.exp(uci[inds]), label='unnorm ci')
+#plt.plot(bi[inds], label='norm bi')
+plt.plot(ubi[inds], label='unnorm. bi')
+
+#plt.plot(np.exp(b[inds]), label='b')
+plt.legend()
+plt.show()
+
+
 # Comparison of statistics approach and cosine distance for chord detection.
 
 cosm = CosineSimilarityBinaryPatternModel({'maj':['I', 'III', 'V'], 'min':['I', 'IIIb', 'V']}, {'maj': '', 'min': ':min'})
@@ -47,8 +84,8 @@ m.fit(segments)
 chords, lu = m.predictExternalLabels(realSegments.chromas)
 print("CorrectnessBalanceModel3:", testAccuracy(chords, realSegments))
 
-plt.plot(np.exp(coslu)[inds], label = "normalized utility based on Correctness + Balance")
-plt.plot(np.exp(lu)[inds], label = "normalized cosine distance")
+plt.plot(np.exp(coslu)[inds], label = "normalized cosine distance")
+plt.plot(np.exp(lu)[inds], label = "normalized Utility based on Correctness * Balance")
 plt.legend()
 plt.xlabel("sample N")
 #plt.plot(np.exp((b+c))[inds])
@@ -62,8 +99,8 @@ plt.show()
 m = CorrectnessLogNormBalanceModel({'maj':['I', 'III', 'V'], 'min':['I', 'IIIb', 'V']}, {'maj': '', 'min': ':min'})
 m.fit(segments)
 p, lu = m.predict(realSegments.chromas)
-c = m.correctness(realSegments.chromas, p)
-b = m.balance(realSegments.chromas, p)
+c = m.correctnessGivenSequence(realSegments.chromas, p)
+b = m.balanceGivenSequence(realSegments.chromas, p)
 
 # All these should be very close:
 a = c+b
@@ -129,8 +166,8 @@ m = CorrectnessLogNormBalanceModel({'maj':['I', 'III', 'V'], 'min':['I', 'IIIb',
 m.fit(segments)
 p = realSegments.pitchedPatterns()[inds]
 
-c = m.correctness(realSegments.chromas[inds], p)
-b = m.balance(realSegments.chromas[inds], p)
+c = m.correctnessGivenSequence(realSegments.chromas[inds], p)
+b = m.balanceGivenSequence(realSegments.chromas[inds], p)
 lu = m.logUtilitiesGivenSequence(realSegments.chromas[inds], p)
 coslu = cosm.logUtilitiesGivenSequence(realSegments.chromas[inds], p)
 
@@ -178,8 +215,8 @@ m.fit(segments)
 chords, lu = m.predictExternalLabels(realSegments.chromas)
 print("CorrectnessBalanceModel3:", testAccuracy(chords, realSegments))
 p, lu = m.predict(realSegments.chromas)
-c = m.correctness(realSegments.chromas, p)
-b = m.balance(realSegments.chromas, p)
+c = m.correctnessGivenSequence(realSegments.chromas, p)
+b = m.balanceGivenSequence(realSegments.chromas, p)
 
 inds = np.where(realSegments.kinds != 'unclassified')
 plt.plot(lu[inds])
@@ -225,6 +262,3 @@ print("Dirichlet:", testAccuracy(chords, realSegments))
 inds = np.where(realSegments.kinds != 'unclassified')
 plt.plot(lu[inds])
 plt.show()
-
-########################################################################################################################
-

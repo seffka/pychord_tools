@@ -7,7 +7,7 @@ from matplotlib.collections import PatchCollection
 import numpy as np
 from scipy.stats import beta
 from pychord_tools.compositionalData import amalgamate
-from lowLevelFeatures import DEGREES
+from pychord_tools.lowLevelFeatures import DEGREES
 
 class TernaryDensity :
     def __init__(self, steps = 10):

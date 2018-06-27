@@ -6,7 +6,7 @@ import re
 import os.path as path
 import pychord_tools.commonUtils as commonUtils
 import pychord_tools.cacher as cacher
-from pychord_tools.commonUtils import convertChordLabels
+from pychord_tools.commonUtils import convertChordLabels, ChordSegment
 
 import essentia
 import essentia.streaming as esstr
@@ -47,6 +47,12 @@ class PitchedPattern:
             self.pitchClassIndex = pitchClassIndex
     def __repr__(self):
         return PITCH_CLASS_NAMES[self.pitchClassIndex] + ':' + self.kind
+
+    def __eq__(self, other):
+        if isinstance(self, other.__class__):
+            return self.kind == other.kind and\
+                   self.pitchClassIndex == other.pitchClassIndex
+        return False
 
 
 class AnnotatedChromaSegments(ChromaSegments):
@@ -421,7 +427,7 @@ class AnnotatedBeatChromaEstimator:
             allBeats = []
             allChords = []
             commonUtils.processParts(metreNumerator, data, allBeats, allChords, 'chords')
-            segments = commonUtils.toBeatChordSegmentList(0, duration, allBeats, allChords)
+            segments = commonUtils.toBeatChordSegmentList(allBeats[0], duration, allBeats, allChords)
             #
             chromas = None
             labels = np.empty(len(segments), dtype='object')
@@ -459,6 +465,54 @@ class AnnotatedBeatChromaEstimator:
                 shift = 12 - annotatedChromaSegments.pitches[i]
                 annotatedChromaSegments.chromas[i] = np.roll(
                     annotatedChromaSegments.chromas[i], shift=shift)
+        return annotatedChromaSegments
+
+class BeatChromaEstimator:
+    def __init__(self,
+                 beats,
+                 pitchedPatterns,
+                 duration,
+                 chromaEstimator = HPCPChromaEstimator(),
+                 beatChromaEstimator = SmoothedStartingBeatChromaEstimator(),
+                 uid = ""):
+        self.beats = np.concatenate((beats, [duration]))
+        self.pitchedPatterns = pitchedPatterns
+        self.chromaEstimator = chromaEstimator
+        self.duration = duration
+        self.uid = uid
+        self.beatChromaEstimator = beatChromaEstimator
+
+    def loadChromas(self, audioFileName):
+        segments = []
+        for i in range(len(self.pitchedPatterns)):
+            sym = str(self.pitchedPatterns[i])
+            segments.append(ChordSegment(self.beats[i], self.beats[i + 1], sym))
+
+        labels = np.empty(len(segments), dtype='object')
+        pitches = np.empty(len(segments), dtype='int')
+        kinds = np.empty(len(segments), dtype='object')
+        uids = np.empty(len(segments), dtype='object')
+        startTimes = np.zeros(len(segments), dtype='float32')
+        durations = np.zeros(len(segments), dtype='float32')
+        for i in range(len(segments)):
+            s = int(float(segments[i].startTime) *
+                    self.chromaEstimator.sampleRate / self.chromaEstimator.hopSize)
+            e = int(float(segments[i].endTime) *
+                    self.chromaEstimator.sampleRate / self.chromaEstimator.hopSize)
+            if (s == e):
+                print("empty segment ", segments[i].startTime, segments[i].endTime)
+                raise
+            labels[i] = segments[i].symbol
+            pitches[i] = self.pitchedPatterns[i].pitchClassIndex
+            kinds[i] = self.pitchedPatterns[i].kind
+            uids[i] = self.uid
+            startTimes[i] = segments[i].startTime
+            durations[i] = float(segments[i].endTime) - float(segments[i].startTime)
+        annotatedChromaSegments = AnnotatedChromaSegments(
+            labels, pitches, kinds, None, uids, startTimes, durations)
+        self.beatChromaEstimator.fillSegmentsWithChroma(
+            annotatedChromaSegments, self.chromaEstimator.estimateChroma(audioFileName))
+
         return annotatedChromaSegments
 
 @cacher.memory.cache(ignore=['sampleRate', 'audioSamples'])
