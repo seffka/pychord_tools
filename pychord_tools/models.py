@@ -271,7 +271,7 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
             indices = [p.pitchClassIndex * self.NKinds + self.kinds.index(p.kind) for p in pitchedPatterns]
             return np.array([lu[i, indices[i]] for i in range(len(indices))])
         else:
-            return self.correctness(chromas, pitchedPatterns) + self.balance(chromas, pitchedPatterns)
+            return self.correctnessGivenSequence(chromas, pitchedPatterns) + self.balanceGivenSequence(chromas, pitchedPatterns)
 
     def correctnessGivenSequence(self, chromas, pitchedPatterns, normalize = False):
         res = np.zeros(len(chromas))
