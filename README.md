@@ -1,7 +1,6 @@
 # pychord_tools
 
-A repository for developing chroma extraction and chord detection algorithms
-with minimal external dependencies.
+A repository for developing chroma extraction and chord detection algorithms.
 
 ## Installation
    * essentia library with python bindings must be installed:
