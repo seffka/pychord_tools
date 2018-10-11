@@ -1,13 +1,47 @@
-import madmom.features as mf
 import numpy as np
+
 import vamp
-import pychord_tools.cacher as cacher
 import essentia
-from pychord_tools.lowLevelFeatures import audioDuration
-from pychord_tools.lowLevelFeatures import ChromaEstimator
+import madmom.features as mf
+import gzip
+import csv
+
+from . import cacher
+from . import path_db
+from .low_level_features import audio_duration
+from .low_level_features import ChromaEstimator
+
+
+def load_nnls_chroma_from_csv_zip(pathname):
+    res = []
+    with gzip.open(pathname, "rt") as csvfile:
+        csvreader = csv.reader(csvfile,
+                               delimiter=',',
+                               quotechar='|',
+                               quoting=csv.QUOTE_MINIMAL)
+        for row in csvreader:
+            res.append(np.array(row[1:]).astype(np.float))
+    return np.array(res)
+
+def dump_nnls_chroma_to_csv_zip(pathname, chroma, sample_rate=44100, step_size=2048):
+    with gzip.open(pathname, "wt") as csvfile:
+        csvwriter = csv.writer(csvfile,
+                               delimiter=',',
+                               quotechar='|',
+                               quoting=csv.QUOTE_MINIMAL)
+        for i in range(len(chroma)):
+            a = i * step_size / float(sample_rate)
+            row = np.concatenate(([a], chroma[i]))
+            csvwriter.writerow(row)
+
 
 @cacher.memory.cache
-def nnlsChromaFromAudio(audiofile, sampleRate=44100, stepSize=2048):
+def nnls_chroma_from_audio(uid, sample_rate=44100, step_size=2048):
+    args = {'sample_rate': sample_rate, 'step_size': step_size}
+    csv_zip_path = path_db.get_features_path(uid, 'nnls_chroma', args)
+    if csv_zip_path is not None:
+        return load_nnls_chroma_from_csv_zip(csv_zip_path)
+
     mywindow = np.array(
         [0.001769, 0.015848, 0.043608, 0.084265, 0.136670, 0.199341, 0.270509, 0.348162, 0.430105, 0.514023,
          0.597545, 0.678311, 0.754038, 0.822586, 0.882019, 0.930656, 0.967124, 0.990393, 0.999803, 0.999803,
@@ -19,12 +53,13 @@ def nnlsChromaFromAudio(audiofile, sampleRate=44100, stepSize=2048):
          0.481304, 0.444018, 0.407044, 0.370590, 0.334860, 0.300054, 0.266366, 0.233984, 0.203090,
          0.173856, 0.146447, 0.121014, 0.097701, 0.076638, 0.057942, 0.041719, 0.028058, 0.017037,
          0.008717, 0.003144, 0.000350])
-    audio = essentia.standard.MonoLoader(filename=audiofile, sampleRate=sampleRate)()
+
+    audio = essentia.standard.MonoLoader(filename=path_db.get_audio_path(uid), sampleRate=sample_rate)()
     # estimate audio duration just for caching purposes:
-    audioDuration(audiofile, sampleRate=sampleRate, audioSamples=audio)
+    audio_duration(uid, sample_rate=sample_rate, audio_samples=audio)
 
     stepsize, semitones = vamp.collect(
-        audio, sampleRate, "nnls-chroma:nnls-chroma", output="semitonespectrum", step_size=stepSize)["matrix"]
+        audio, sample_rate, "nnls-chroma:nnls-chroma", output="semitonespectrum", step_size=step_size)["matrix"]
     chroma = np.zeros((semitones.shape[0], 12))
     for i in range(semitones.shape[0]):
         tones = semitones[i] * mywindow
@@ -35,22 +70,23 @@ def nnlsChromaFromAudio(audiofile, sampleRate=44100, stepSize=2048):
     chroma = np.roll(chroma, shift=-3, axis=1)
     return chroma
 
-class NNLSChromaEstimator(ChromaEstimator):
-    def __init__(self, hopSize = 2048, sampleRate = 44100):
-        super().__init__(16384, hopSize, sampleRate)
 
-    def estimateChroma(self, audioFileName):
-        return nnlsChromaFromAudio(audioFileName, self.sampleRate, self.hopSize)
+class NNLSChromaEstimator(ChromaEstimator):
+    def __init__(self, hop_size=2048, sample_rate=44100):
+        super().__init__(16384, hop_size, sample_rate)
+
+    def estimate_chroma(self, uid):
+        return nnls_chroma_from_audio(uid, self.sample_rate, self.hop_size)
 
 
 @cacher.memory.cache
-def rnnBeatSegments(audioFileName):
+def rnn_beat_segments(audio_file_name):
     proc = mf.BeatTrackingProcessor(
-        fps = 100,
+        fps=100,
         method='comb', min_bpm=40,
         max_bpm=240, act_smooth=0.09,
         hist_smooth=7, alpha=0.79)
-    act = mf.RNNBeatProcessor()(str(audioFileName))
+    act = mf.RNNBeatProcessor()(str(audio_file_name))
     stamps = proc(act).astype('float32')
     # the last beat is lost, but who cares...
     # TODO: fix this approach

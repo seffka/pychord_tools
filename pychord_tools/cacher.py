@@ -5,13 +5,15 @@ import os
 # Cache management
 ######################################################################
 
-def getCaheDir():
+
+def get_cahe_dir():
     if 'PYCHORD_TOOLS_CACHE_DIR' in os.environ:
         return os.environ['PYCHORD_TOOLS_CACHE_DIR']
     else:
         return None
 
-memory = joblib.Memory(cachedir=getCaheDir(), verbose=0)
+memory = joblib.Memory(cachedir=get_cahe_dir(), verbose=0)
 
-def clearCache():
+
+def clear_cache():
     memory.clear()
