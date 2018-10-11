@@ -9,4 +9,4 @@ A repository for developing chroma extraction and chord detection algorithms.
      plugin: http://isophonics.net/nnls-chroma
      how to install: https://www.vamp-plugins.org/download.html#install
    * use pip:
-     pip install git+https://github.com/MTG/pychord_tools.git 
+     pip install git+https://github.com/seffka/pychord_tools.git 
