@@ -48,11 +48,10 @@ def merge(symbolic_analysis_segments):
     res.append(current_segment)
     return res
 
-INTERTVALS = ['P1', 'm2', 'M2', 'm3', 'M3', 'P4', 'd5', 'P5', 'm6', 'M6', 'm7', 'M7']
-
+INTERVALS = ['P1', 'm2', 'M2', 'm3', 'M3', 'P4', 'd5', 'P5', 'm6', 'M6', 'm7', 'M7']
 
 def to_interval(pitch1, pitch2):
-    return INTERTVALS[(pitch2 - pitch1) % 12]
+    return INTERVALS[(pitch2 - pitch1) % 12]
 
 
 def to_sequence(intervals):
@@ -90,7 +89,7 @@ def make_transition_c_root_part(two_grams, harmonic_rhythm, label_translator):
         for key in related_keys:
             chord, interval, dummy = key.split('-')
             # inverse interval, since we trace it backwrds
-            n_interval = -INTERTVALS.index(interval) % 12
+            n_interval = -INTERVALS.index(interval) % 12
             n_chord = label_translator.chord_kinds().index(chord)
             pos = label_translator.chord_kinds_number() * n_interval + n_chord
             column[pos] = float(two_grams[key]) / denominator
@@ -116,6 +115,15 @@ def harmonic_rhythm_for_file(anno_file_name, label_translator):
         n_beats = list(map(lambda x: x.n_beats, filter(lambda x: x.kind != labels.UNCLASSIFIED, segments)))
         return float(sum(n_beats)) / len(n_beats)
 
+def beats_for_file(anno_file_name):
+    with open(anno_file_name) as json_file:
+        data = json.load(json_file)
+        duration = float(data['duration'])
+        metre_numerator = int(data['metre'].split('/')[0])
+        all_beats = []
+        all_chords = []
+        common_utils.process_parts(metre_numerator, data, all_beats, all_chords, 'chords')
+        return all_beats
 
 def harmonic_rhythm_for_each_file_in_list(file_list, label_translator):
     result_by_file = {}
