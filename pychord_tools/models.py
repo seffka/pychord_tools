@@ -26,18 +26,18 @@ class ChromaPatternModel:
     """
     def __init__(self, kinds, kind_to_external_names=None):
         self.kinds = kinds
-        self.NKinds = len(self.kinds)
+        self.n_kinds = len(self.kinds)
         if kind_to_external_names is not None:
-            self.kindToExternalNames = kind_to_external_names
+            self.kind_to_external_names = kind_to_external_names
         else:
-            self.kindToExternalNames = {k : k for k in self.kinds}
+            self.kind_to_external_names = {k : k for k in self.kinds}
 
         self.externalNames = np.empty(
-            len(PITCH_CLASS_NAMES) * self.NKinds, dtype='object')
+            len(PITCH_CLASS_NAMES) * self.n_kinds, dtype='object')
         for p in range(len(PITCH_CLASS_NAMES)):
-            for c in range(self.NKinds):
-                self.externalNames[p * self.NKinds + c] = \
-                    PITCH_CLASS_NAMES[p] + kind_to_external_names[self.kinds[c]]
+            for c in range(self.n_kinds):
+                self.externalNames[p * self.n_kinds + c] = \
+                    PITCH_CLASS_NAMES[p] + self.kind_to_external_names[self.kinds[c]]
 
     def log_utilities(self, chromas, normalize=True):
         return np.zeros((len(chromas), len(self.externalNames)))
@@ -55,7 +55,7 @@ class ChromaPatternModel:
         lu = self.log_utilities(chromas)
         indices = np.argmax(lu, axis=1)
         return np.array(
-            [PitchedPattern(kind=self.kinds[x % self.NKinds], pitch_class_index=x // self.NKinds) for x in indices]),\
+            [PitchedPattern(kind=self.kinds[x % self.n_kinds], pitch_class_index=x // self.n_kinds) for x in indices]),\
                np.array([lu[i, indices[i]] for i in range(len(indices))])
 
     def fit(self, segments):
@@ -65,7 +65,7 @@ class ChromaPatternModel:
         joblib.dump(self, file_name)
 
     def index(self, pitched_pattern):
-        return pitched_pattern.pitch_class_index * self.NKinds + self.kinds.index(pitched_pattern.kind)
+        return pitched_pattern.pitch_class_index * self.n_kinds + self.kinds.index(pitched_pattern.kind)
 
 def degrees_to_binary_pattern(degree_list):
     result = np.zeros(12, dtype='int')
@@ -92,7 +92,7 @@ class CosineSimilarityBinaryPatternModel(ChromaPatternModel):
         lps = np.zeros((len(chromas), len(self.externalNames)))
         chromas = chromas.astype('float64')
         for basePitch in range(len(PITCH_CLASS_NAMES)):
-            pos = basePitch * self.NKinds
+            pos = basePitch * self.n_kinds
             # NOTE: log-ratio pre-processing should be applied to shifted
             # chroma, so we always do it inside loop.
             pre_chromas = self.preprocess(chromas)
@@ -167,7 +167,10 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
         self.betaParams = None
 
     def preprocess(self, chroma):
-        return preprocessing.normalize(substitute_zeros(chroma), norm='l1')
+        if chroma.shape[1] >= 2:
+            return preprocessing.normalize(substitute_zeros(chroma), norm='l1')
+        else:
+            return chroma
 
     def train_alr_gaussian(self, vectors):
         gmm = GaussianMixture(
@@ -205,7 +208,7 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
         chromas = chromas.astype('float64')
         dist_beta = beta(*self.betaParams)
         for basePitch in range(len(PITCH_CLASS_NAMES)):
-            pos = basePitch * self.NKinds
+            pos = basePitch * self.n_kinds
             # NOTE: log-ratio preprocessing should be applied to shifted
             # chroma, so we always do it inside loop.
             pre_chromas = self.preprocess(chromas)
@@ -230,7 +233,7 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
         chromas = chromas.astype('float64')
         dist_beta = beta(*self.betaParams)
         for basePitch in range(len(PITCH_CLASS_NAMES)):
-            pos = basePitch * self.NKinds
+            pos = basePitch * self.n_kinds
             # NOTE: log-ratio preprocessing should be applied to shifted
             # chroma, so we always do it inside loop.
             pre_chromas = self.preprocess(chromas)
@@ -251,7 +254,7 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
         res = np.zeros((len(chromas), len(self.externalNames)))
         chromas = chromas.astype('float64')
         for basePitch in range(len(PITCH_CLASS_NAMES)):
-            pos = basePitch * self.NKinds
+            pos = basePitch * self.n_kinds
             # NOTE: log-ratio preprocessing should be applied to shifted
             # chroma, so we always do it inside loop.
             pre_chromas = self.preprocess(chromas)
@@ -269,7 +272,7 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
     def log_utilities_given_sequence(self, chromas, pitched_patterns, normalize=False):
         if normalize:
             lu = self.log_utilities(chromas)
-            indices = [p.pitch_class_index * self.NKinds + self.kinds.index(p.kind) for p in pitched_patterns]
+            indices = [p.pitch_class_index * self.n_kinds + self.kinds.index(p.kind) for p in pitched_patterns]
             return np.array([lu[i, indices[i]] for i in range(len(indices))])
         else:
             return self.correctness_given_sequence(chromas, pitched_patterns) +\
@@ -282,7 +285,7 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
             raise ValueError("Input vectors need to be equal size.")
         if normalize:
             c = self.correctness(chromas, True)
-            indices = [p.pitch_class_index * self.NKinds + self.kinds.index(p.kind) for p in pitched_patterns]
+            indices = [p.pitch_class_index * self.n_kinds + self.kinds.index(p.kind) for p in pitched_patterns]
             return np.array([c[i, indices[i]] for i in range(len(indices))])
         else:
             for i in range(len(pitched_patterns)):
@@ -299,7 +302,7 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
             raise ValueError("Input vectors need to be equal size.")
         if normalize:
             b = self.balance(chromas, True)
-            indices = [p.pitch_class_index * self.NKinds + self.kinds.index(p.kind) for p in pitched_patterns]
+            indices = [p.pitch_class_index * self.n_kinds + self.kinds.index(p.kind) for p in pitched_patterns]
             return np.array([b[i, indices[i]] for i in range(len(indices))])
         else:
             for i in range(len(pitched_patterns)):
@@ -322,7 +325,11 @@ class IndependentPDFModel(CorrectnessLogNormBalanceModel):
             n_components=1,
             covariance_type='diag',
             max_iter=200)
-        gmm.fit(np.apply_along_axis(alr, 1, vectors))
+        print(vectors.shape)
+        if vectors.shape[1] > 1:
+            vectors = np.apply_along_axis(alr, 1, vectors)
+        print(vectors.shape)
+        gmm.fit(vectors)
         return gmm
 
 
@@ -374,7 +381,7 @@ class DirichletModel(ChromaPatternModel):
         lps = np.zeros((len(chromas), len(self.externalNames)))
         chromas = chromas.astype('float64')
         for basePitch in range(len(PITCH_CLASS_NAMES)):
-            pos = basePitch * self.NKinds
+            pos = basePitch * self.n_kinds
             # NOTE: log-ratio preprocessing should be applied to shifted
             # chroma, so we always do it inside loop.
             pre_chromas = self.preprocess(chromas)
@@ -441,7 +448,7 @@ class CorrectnessDirichletBalanceModel(CorrectnessBalanceResidualsModel):
         lps = np.zeros((len(chromas), len(self.externalNames)))
         chromas = chromas.astype('float64')
         for basePitch in range(len(PITCH_CLASS_NAMES)):
-            pos = basePitch * self.NKinds
+            pos = basePitch * self.n_kinds
             # NOTE: log-ratio preprocessing should be applied to shifted
             # chroma, so we always do it inside loop.
             pre_chromas = self.preprocess(chromas)

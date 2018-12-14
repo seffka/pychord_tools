@@ -1,6 +1,6 @@
 import json
 import re
-
+import numpy as np
 
 def load_file_list(list_file_name):
     result = []
@@ -43,30 +43,72 @@ def merge_segments(chord_segments):
     return res
 
 
-def process_chords(numerator, blocks, all_chords):
+def is_in_chord_mode(chords):
+    for c in chords:
+        if len(c.split(':')) > 2:
+            return False
+    return True
+
+
+def process_chords(numerator, blocks, all_chords, all_events, all_beats):
+    n = 0
     for block in blocks:
         bars = block.split('|')[1:-1]
         for bar in bars:
             chords = [c for c in re.split('\s+', bar) if c != '']
-            divisors = all_divisors(numerator)
-            if not (len(chords) in divisors):
-                raise ValueError("Wrong number of chords in a bar: " + bar)
-            multiplier = numerator // len(chords)
-            newchords = []
-            for c in chords:
-                newchords.extend([c] * multiplier)
-            all_chords.extend(newchords)
+            beats = all_beats[n*numerator:(n+1) * numerator]
+            extended_beats = np.array(beats)
+            if (n+1) * numerator < len(all_beats):
+                extended_beats = np.append(extended_beats, all_beats[(n+1) * numerator])
+            else:
+                extended_beats = np.append(extended_beats, extended_beats[-1] + (extended_beats[1:]-extended_beats[:-1]).mean())
+            if is_in_chord_mode(chords):
+                divisors = all_divisors(numerator)
+                if not (len(chords) in divisors):
+                    raise ValueError("Wrong number of chords in a bar: " + bar)
+                multiplier = numerator // len(chords)
+                newchords = []
+                for c in chords:
+                    newchords.extend([c] * multiplier)
+                all_chords.extend(newchords)
+                all_events.extend(beats)
+            else:
+                # events mode
+                bar_events = []
+                pure_chords = []
+                pos = 0
+                for c in chords:
+                    components = c.split(':')
+                    pure_chords.append(':'.join(components[0:2]))
+                    bar_events.append(pos)
+                    # TODO: supports non-4 denominators
+                    if len(components) > 2:
+                        pos += 4.0 / int(components[2])
+                    else:
+                        pos += 1
+                if abs(pos - numerator) > 0.001:
+                    raise ValueError("Inapropriate bar length: " + pos)
+                bar_events = np.array(bar_events, dtype=float)
+                conditions = []
+                funcs = []
+                for i in range(numerator):
+                    conditions.append((bar_events >= i) & (bar_events < (i+1)))
+                    funcs.append(lambda x, i=i: extended_beats[i] + (extended_beats[i + 1] - extended_beats[i]) * (x - float(i)))
+                all_chords.extend(pure_chords)
+                all_events.extend(np.piecewise(bar_events, conditions, funcs))
+            n += 1
 
 
-def process_parts(metre_numerator, data, beats, chords, choice):
+def process_parts(metre_numerator, data, events, chords, choice, beatz = None):
     if 'parts' in data.keys():
         for part in data['parts']:
-            process_parts(metre_numerator, part, beats, chords, choice)
+            process_parts(metre_numerator, part, events, chords, choice, beatz)
     else:
         if 'metre' in data:
             metre_numerator = int(data['metre'].split('/')[0])
-        beats.extend(data['beats'])
-        process_chords(metre_numerator, data[choice], chords)
+        if beatz is not None:
+            beatz.extend(data['beats'])
+        process_chords(metre_numerator, data[choice], chords, events, data['beats'])
 
 
 class ChordSegment:

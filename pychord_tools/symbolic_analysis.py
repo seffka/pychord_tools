@@ -120,10 +120,21 @@ def beats_for_file(anno_file_name):
         data = json.load(json_file)
         duration = float(data['duration'])
         metre_numerator = int(data['metre'].split('/')[0])
+        all_events = []
         all_beats = []
         all_chords = []
-        common_utils.process_parts(metre_numerator, data, all_beats, all_chords, 'chords')
+        common_utils.process_parts(metre_numerator, data, all_events, all_chords, 'chords', all_beats)
         return all_beats
+
+def events_for_file(anno_file_name):
+    with open(anno_file_name) as json_file:
+        data = json.load(json_file)
+        duration = float(data['duration'])
+        metre_numerator = int(data['metre'].split('/')[0])
+        all_events = []
+        all_chords = []
+        common_utils.process_parts(metre_numerator, data, all_events, all_chords, 'chords')
+        return all_events
 
 def harmonic_rhythm_for_each_file_in_list(file_list, label_translator):
     result_by_file = {}
