@@ -201,7 +201,9 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
 
     def score_balance(self, kind, pre_chromas):
         in_chroma_composition = subcomposition([[e] for e in self.in_degree_dict[kind]], pre_chromas)
-        return self.balanceGMMs[kind].score_samples(np.apply_along_axis(alr, 1, in_chroma_composition))
+        if in_chroma_composition.shape[1] > 1:
+            in_chroma_composition = np.apply_along_axis(alr, 1, in_chroma_composition)
+        return self.balanceGMMs[kind].score_samples(in_chroma_composition)
 
     def log_utilities(self, chromas, normalize=True):
         lps = np.zeros((len(chromas), len(self.externalNames)))
@@ -218,7 +220,10 @@ class CorrectnessLogNormBalanceModel(CorrectnessBalanceResidualsModel):
                 in_chroma_sums = amalgamate(partition, pre_chromas).transpose()[0]
                 in_chroma_composition = subcomposition([[e] for e in self.in_degree_dict[k]], pre_chromas)
                 correctness = dist_beta.logcdf(in_chroma_sums)
-                balance = self.balanceGMMs[k].score_samples(np.apply_along_axis(alr, 1, in_chroma_composition))
+
+                if in_chroma_composition.shape[1] > 1:
+                    in_chroma_composition = np.apply_along_axis(alr, 1, in_chroma_composition)
+                balance = self.balanceGMMs[k].score_samples(in_chroma_composition)
                 lps[:, pos + ki] = (correctness + balance)
                 ki += 1
             chromas = np.roll(chromas, -1, axis=1)
