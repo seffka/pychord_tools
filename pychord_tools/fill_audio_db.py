@@ -8,7 +8,7 @@ import argparse
 import acoustid
 import musicbrainzngs as m
 
-from .path_db import set_audio_path, dump_path_db
+from pychord_tools.path_db import set_audio_path, dump_path_db
 
 m.set_useragent("application", "0.01", "http://example.com")
 
