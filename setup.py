@@ -13,7 +13,17 @@ setup(
         'pychord_tools': ['*.pkl'],
     },
     install_requires = [
-        'argparse', 'numpy', 'vamp', 'joblib', 'sklearn', 'matplotlib', 'scipy', 'pyacoustid', 'dirichlet'
+        'argparse',
+        'numpy',
+        'vamp',
+        'joblib',
+        'sklearn',
+        'matplotlib',
+        'scipy',
+        'pyacoustid',
+        'dirichlet',
+        'musicbrainzngs',
+        'essentia'
     ],
     dependency_links=[
         "git+ssh://git@github.com:ericsuh/dirichlet.git"
