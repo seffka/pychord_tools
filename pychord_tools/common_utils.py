@@ -50,13 +50,22 @@ def is_in_chord_mode(chords):
     return True
 
 
-def process_chords(numerator, blocks, all_chords, all_events, all_beats):
+def process_chords(numerator, blocks, all_bars, all_chords, all_events, all_beats):
     n = 0
+
     for block in blocks:
         bars = block.split('|')[1:-1]
         for bar in bars:
             chords = [c for c in re.split('\s+', bar) if c != '']
             beats = all_beats[n*numerator:(n+1) * numerator]
+            if all_bars is not None:
+                if len(all_bars) > 0:
+                    all_bars[-1][1] = beats[0]
+                print('all_bars', all_bars)
+                all_bars.append([beats[0], beats[0]])
+                if len(beats) > 1:
+                    all_bars[-1][1] = beats[-1] + (beats[-1] - beats[-2])
+
             extended_beats = np.array(beats)
             if (n+1) * numerator < len(all_beats):
                 extended_beats = np.append(extended_beats, all_beats[(n+1) * numerator])
@@ -99,16 +108,16 @@ def process_chords(numerator, blocks, all_chords, all_events, all_beats):
             n += 1
 
 
-def process_parts(metre_numerator, data, events, chords, choice, beatz = None):
+def process_parts(metre_numerator, data, events, chords, choice, beatz = None, bars = None):
     if 'parts' in data.keys():
         for part in data['parts']:
-            process_parts(metre_numerator, part, events, chords, choice, beatz)
+            process_parts(metre_numerator, part, events, chords, choice, beatz, bars)
     else:
         if 'metre' in data:
             metre_numerator = int(data['metre'].split('/')[0])
         if beatz is not None:
             beatz.extend(data['beats'])
-        process_chords(metre_numerator, data[choice], chords, events, data['beats'])
+        process_chords(metre_numerator, data[choice], bars, chords, events, data['beats'])
 
 
 class ChordSegment:

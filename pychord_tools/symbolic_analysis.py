@@ -115,6 +115,21 @@ def harmonic_rhythm_for_file(anno_file_name, label_translator):
         n_beats = list(map(lambda x: x.n_beats, filter(lambda x: x.kind != labels.UNCLASSIFIED, segments)))
         return float(sum(n_beats)) / len(n_beats)
 
+def bars_for_file(anno_file_name):
+    with open(anno_file_name) as json_file:
+        data = json.load(json_file)
+        duration = float(data['duration'])
+        metre_numerator = int(data['metre'].split('/')[0])
+        all_events = []
+        all_beats = []
+        all_chords = []
+        all_bars = []
+        common_utils.process_parts(metre_numerator, data, all_events, all_chords, 'chords', all_beats, all_bars)
+        # TODO: how to detect actual ending (end of the last beat)?
+        # all_bars[-1][1] = duration
+        return all_bars
+
+
 def beats_for_file(anno_file_name):
     with open(anno_file_name) as json_file:
         data = json.load(json_file)
