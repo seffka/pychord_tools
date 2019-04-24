@@ -10,6 +10,7 @@ from . import cacher
 from . import path_db
 from .low_level_features import audio_duration
 from .low_level_features import ChromaEstimator
+from .low_level_features import AudioPathExtractor
 
 
 def load_nnls_chroma_from_csv_zip(pathname):
@@ -22,6 +23,7 @@ def load_nnls_chroma_from_csv_zip(pathname):
         for row in csvreader:
             res.append(np.array(row[1:]).astype(np.float))
     return np.array(res)
+
 
 def dump_nnls_chroma_to_csv_zip(pathname, chroma, sample_rate=44100, step_size=2048):
     with gzip.open(pathname, "wt") as csvfile:
@@ -36,7 +38,7 @@ def dump_nnls_chroma_to_csv_zip(pathname, chroma, sample_rate=44100, step_size=2
 
 
 @cacher.memory.cache
-def nnls_chroma_from_audio(uid, sample_rate=44100, step_size=2048):
+def nnls_chroma_from_audio(uid, audio_path_extractor, sample_rate=44100, step_size=2048):
     args = {'sample_rate': sample_rate, 'step_size': step_size}
     csv_zip_path = path_db.get_features_path(uid, 'nnls_chroma', args)
     if csv_zip_path is not None:
@@ -54,9 +56,9 @@ def nnls_chroma_from_audio(uid, sample_rate=44100, step_size=2048):
          0.173856, 0.146447, 0.121014, 0.097701, 0.076638, 0.057942, 0.041719, 0.028058, 0.017037,
          0.008717, 0.003144, 0.000350])
 
-    audio = essentia.standard.MonoLoader(filename=path_db.get_audio_path(uid), sampleRate=sample_rate)()
+    audio = essentia.standard.MonoLoader(filename=audio_path_extractor.audio_path_name(uid), sampleRate=sample_rate)()
     # estimate audio duration just for caching purposes:
-    audio_duration(uid, sample_rate=sample_rate, audio_samples=audio)
+    audio_duration(uid, sample_rate=sample_rate, audio_samples=audio, audio_path_extractor=audio_path_extractor)
 
     stepsize, semitones = vamp.collect(
         audio, sample_rate, "nnls-chroma:nnls-chroma", output="semitonespectrum", step_size=step_size)["matrix"]
@@ -72,11 +74,11 @@ def nnls_chroma_from_audio(uid, sample_rate=44100, step_size=2048):
 
 
 class NNLSChromaEstimator(ChromaEstimator):
-    def __init__(self, hop_size=2048, sample_rate=44100):
-        super().__init__(16384, hop_size, sample_rate)
+    def __init__(self, audio_path_extractor=AudioPathExtractor(), hop_size=2048, sample_rate=44100):
+        super().__init__(16384, hop_size, sample_rate, audio_path_extractor=audio_path_extractor)
 
     def estimate_chroma(self, uid):
-        return nnls_chroma_from_audio(uid, self.sample_rate, self.hop_size)
+        return nnls_chroma_from_audio(uid, self.audio_path_extractor, self.sample_rate, self.hop_size)
 
 
 @cacher.memory.cache

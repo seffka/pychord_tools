@@ -5,16 +5,12 @@ from scipy.stats import beta
 from sklearn import preprocessing
 from sklearn.mixture import GaussianMixture
 from scipy.misc import logsumexp
-from scipy.stats import norm
 
 from .compositional_data import alr
 from .compositional_data import amalgamate
 from .compositional_data import subcomposition
 from .compositional_data import substitute_zeros
-from .low_level_features import AnnotatedBeatChromaEstimator
-from .low_level_features import SmoothedStartingBeatChromaEstimator
-from .labels import PITCH_CLASS_NAMES, DEGREES, PitchedPattern, degree_indices, convert_chord_labels
-from .third_party import NNLSChromaEstimator
+from .labels import PITCH_CLASS_NAMES, PitchedPattern, degree_indices, convert_chord_labels
 
 # pip install git+https://github.com/ericsuh/dirichlet.git
 import dirichlet

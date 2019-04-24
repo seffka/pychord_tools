@@ -50,16 +50,42 @@ class AnnotatedChromaSegments(ChromaSegments):
 # Interfaces
 ######################################################################
 
+class UidExtractor:
+    def uid(self, annotation_file_name):
+        pass
+
+
+class AudioPathExtractor:
+    def audio_path_name(self, uid):
+        return uid
+
+
+class MBIDUidAndAudioPathExtractor(UidExtractor, AudioPathExtractor):
+    def uid(self, annotation_file_name):
+        with open(annotation_file_name) as json_file:
+            data = json.load(json_file)
+            return data['mbid']
+
+    def audio_path_name(self, uid):
+            return get_audio_path(uid)
+
+
 class BeatSegmentsEstimator:
     def estimate_beats(self, uid):
         pass
 
 
 class ChromaEstimator:
-    def __init__(self, frame_size=16384, hop_size=2048, sample_rate=44100):
+    def __init__(
+            self,
+            frame_size=16384,
+            hop_size=2048,
+            sample_rate=44100,
+            audio_path_extractor=AudioPathExtractor()):
         self.frame_size = frame_size
         self.hop_size = hop_size
         self.sample_rate = sample_rate
+        self.audio_path_extractor = audio_path_extractor
 
     def estimate_chroma(self, uid):
         pass
@@ -77,10 +103,6 @@ class SegmentChromaEstimator:
     def get_chroma_by_beats(self, beats, chroma):
         pass
 
-
-class UidAndAudioPathExtractor:
-    def uid_and_audio_path_name(self, annotation_file_name):
-        pass
 
 ######################################################################
 
@@ -131,15 +153,6 @@ def smooth(x, window_len=11, window='hanning'):
 ######################################################################
 
 
-class DefaultUidAndAudioPathExtractor(UidAndAudioPathExtractor):
-    def uid_and_audio_path_name(self, annotation_file_name):
-        with open(annotation_file_name) as json_file:
-            data = json.load(json_file)
-            uid = data['mbid']
-            audio_path = get_audio_path(uid)
-            return uid, audio_path
-
-
 class HPCPChromaEstimator(ChromaEstimator):
     """
     Extract HPCP chroma features with essentia
@@ -158,6 +171,7 @@ class HPCPChromaEstimator(ChromaEstimator):
             frame_size=16384,
             hop_size=2048,
             sample_rate=44100,
+            audio_path_extractor=AudioPathExtractor(),
             order_by="magnitude",
             magnitude_threshold=1e-05,
             min_frequency=40,
@@ -170,7 +184,7 @@ class HPCPChromaEstimator(ChromaEstimator):
             weight_type="cosine",
             non_linear=True,
             window_size=1.0):
-        super().__init__(frame_size, hop_size, sample_rate)
+        super().__init__(frame_size, hop_size, sample_rate, audio_path_extractor)
         self.tuning_freq = tuning_freq
         self.order_by = order_by
         self.magnitude_threshold = magnitude_threshold
@@ -186,7 +200,7 @@ class HPCPChromaEstimator(ChromaEstimator):
         self.window_size = window_size
 
     def estimate_chroma(self, uid):
-        loader = esstr.MonoLoader(filename=get_audio_path(uid))
+        loader = esstr.MonoLoader(filename=self.audio_path_extractor.audio_path_name(uid))
         framecutter = esstr.FrameCutter(hopSize=self.hop_size, frameSize=self.frame_size)
         windowing = esstr.Windowing(type="blackmanharris62")
         spectrum = esstr.Spectrum()
@@ -266,13 +280,14 @@ class SmoothedStartingBeatChromaEstimator(SegmentChromaEstimator):
 
 class AnnotatedBeatChromaEstimator:
     def __init__(self,
-                 chroma_estimator=HPCPChromaEstimator(),
-                 uid_and_audio_path_extractor=DefaultUidAndAudioPathExtractor(),
+                 chroma_estimator=HPCPChromaEstimator(
+                     audio_path_extractor=MBIDUidAndAudioPathExtractor()),
+                 uid_extractor=MBIDUidAndAudioPathExtractor(),
                  segment_chroma_estimator=SmoothedStartingBeatChromaEstimator(),
                  label_translator=MajMinLabelTranslator(),
                  roll_to_c_root=True):
         self.chroma_estimator = chroma_estimator
-        self.uid_and_audio_path_extractor = uid_and_audio_path_extractor
+        self.uid_extractor = uid_extractor
         self.beat_chroma_estimator = segment_chroma_estimator
         self.label_translator = label_translator
         self.roll_to_c_root = roll_to_c_root
@@ -306,7 +321,6 @@ class AnnotatedBeatChromaEstimator:
         with open(json_file_name) as json_file:
             print(json_file_name)
             data = json.load(json_file)
-            uid = uid
             duration = float(data['duration'])
             metre_numerator = int(data['metre'].split('/')[0])
             all_beats = []
@@ -339,8 +353,7 @@ class AnnotatedBeatChromaEstimator:
             return AnnotatedChromaSegments(labels, pitches, kinds, chromas, uids, start_times, durations)
 
     def load_chromas_for_annotation_file(self, annotation_file_name):
-        uid, audio_file_name = self.uid_and_audio_path_extractor.uid_and_audio_path_name(
-            annotation_file_name)
+        uid = self.uid_extractor.uid(annotation_file_name)
         chroma = self.chroma_estimator.estimate_chroma(uid)
         annotated_chroma_segments = self.load_beats_and_annotations(annotation_file_name, uid)
         self.beat_chroma_estimator.fill_segments_with_chroma(annotated_chroma_segments, chroma)
@@ -397,15 +410,15 @@ class BeatChromaEstimator:
         annotated_chroma_segments = AnnotatedChromaSegments(
             labels, pitches, kinds, None, uids, start_times, durations)
         self.beat_chroma_estimator.fill_segments_with_chroma(
-            annotated_chroma_segments, self.chroma_estimator.estimate_chroma(get_audio_path(uid)))
+            annotated_chroma_segments, self.chroma_estimator.estimate_chroma(uid))
 
         return annotated_chroma_segments
 
 
 @cacher.memory.cache(ignore=['sample_rate', 'audio_samples'])
-def audio_duration(uid, sample_rate=44100, audio_samples=None):
+def audio_duration(uid, sample_rate=44100, audio_samples=None, audio_path_extractor=AudioPathExtractor()):
     if audio_samples is not None:
         return float(len(audio_samples)) / sample_rate
     else:
-        audio = essentia.standard.MonoLoader(filename=get_audio_path(uid), sampleRate=sample_rate)()
+        audio = essentia.standard.MonoLoader(filename=audio_path_extractor.audio_path_name(uid), sampleRate=sample_rate)()
         return float(len(audio)) / sample_rate

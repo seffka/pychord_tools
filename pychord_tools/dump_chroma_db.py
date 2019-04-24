@@ -5,7 +5,7 @@ import os
 import re
 import argparse
 
-from .low_level_features import DefaultUidAndAudioPathExtractor
+from .low_level_features import MBIDUidAndAudioPathExtractor
 from .path_db import set_feature_path, dump_path_db
 from . import third_party
 
@@ -24,13 +24,14 @@ def get_args():
 inputDir, outputDir = get_args()
 
 res = []
-extractor = DefaultUidAndAudioPathExtractor()
+extractor = MBIDUidAndAudioPathExtractor()
 params = {'sample_rate': 44100, 'step_size': 2048}
 
 for fname in os.listdir(inputDir):
     if re.search('\.json$', fname):
         pathname = '/'.join((inputDir, fname))
-        uid, audio = extractor.uid_and_audio_path_name(pathname)
+        uid = extractor.uid(pathname)
+        audio = extractor.audio_path_name(uid)
         if audio is None:
             print("Audio is missing:", pathname, uid)
             res.append(pathname)
