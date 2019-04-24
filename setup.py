@@ -26,6 +26,6 @@ setup(
         'essentia'
     ],
     dependency_links=[
-        "git+ssh://git@github.com:ericsuh/dirichlet.gitt#egg=dirichlet-0"
+        "git+ssh://git@github.com:ericsuh/dirichlet.git#egg=dirichlet-0"
     ]
 )
