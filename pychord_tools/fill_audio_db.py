@@ -70,7 +70,6 @@ for path, dname, fnames in os.walk(inputDir):
     for fname in fnames:
         if re.search('(\.wav$)|(\.mp3$)|(\.flac$)', fname):
             pathname = '/'.join((path, fname))
-            print(pathname)
             a = aidmatch(pathname)
             for score, rid, title, artist in a:
                 print(rid, title, artist)

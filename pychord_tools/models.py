@@ -326,10 +326,8 @@ class IndependentPDFModel(CorrectnessLogNormBalanceModel):
             n_components=1,
             covariance_type='diag',
             max_iter=200)
-        print(vectors.shape)
         if vectors.shape[1] > 1:
             vectors = np.apply_along_axis(alr, 1, vectors)
-        print(vectors.shape)
         gmm.fit(vectors)
         return gmm
 

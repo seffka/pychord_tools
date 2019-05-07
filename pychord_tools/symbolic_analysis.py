@@ -199,7 +199,6 @@ def estimate_statistics(file_list, label_translator, top=300, max_n_gram=2000):
     n_files = 0
     for infile in file_list:
         n_files += 1
-        print(infile)
         with open(infile) as json_file:
             data = json.load(json_file)
             duration = float(data['duration'])

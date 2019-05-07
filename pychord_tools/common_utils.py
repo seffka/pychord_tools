@@ -61,7 +61,7 @@ def process_chords(numerator, blocks, all_bars, all_chords, all_events, all_beat
             if all_bars is not None:
                 if len(all_bars) > 0:
                     all_bars[-1][1] = beats[0]
-                print('all_bars', all_bars)
+                #print('all_bars', all_bars)
                 all_bars.append([beats[0], beats[0]])
                 if len(beats) > 1:
                     all_bars[-1][1] = beats[-1] + (beats[-1] - beats[-2])

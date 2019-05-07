@@ -140,7 +140,6 @@ def smooth(x, window_len=11, window='hanning'):
             raise ValueError("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
         xx = x[:, i]
         s = np.r_[xx[window_len - 1:0:-1], xx, xx[-1:-window_len:-1]]
-        # print(len(s))
         if window == 'flat':  # moving average
             w = np.ones(window_len, 'd')
         else:
@@ -319,7 +318,6 @@ class AnnotatedBeatChromaEstimator:
 
     def load_beats_and_annotations(self, json_file_name, uid):
         with open(json_file_name) as json_file:
-            print(json_file_name)
             data = json.load(json_file)
             duration = float(data['duration'])
             metre_numerator = int(data['metre'].split('/')[0])
