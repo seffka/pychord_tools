@@ -320,10 +320,9 @@ class AnnotatedBeatChromaEstimator:
         with open(json_file_name) as json_file:
             data = json.load(json_file)
             duration = float(data['duration'])
-            metre_numerator = int(data['metre'].split('/')[0])
             all_beats = []
             all_chords = []
-            common_utils.process_parts(metre_numerator, data, all_beats, all_chords, 'chords')
+            common_utils.process_parts(data['metre'], data, all_beats, all_chords, 'chords')
             segments = common_utils.to_beat_chord_segment_list(all_beats[0], duration, all_beats, all_chords)
             #
             chromas = None

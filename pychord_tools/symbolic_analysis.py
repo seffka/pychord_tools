@@ -104,10 +104,9 @@ def harmonic_rhythm_for_file(anno_file_name, label_translator):
     with open(anno_file_name) as json_file:
         data = json.load(json_file)
         duration = float(data['duration'])
-        metre_numerator = int(data['metre'].split('/')[0])
         all_beats = []
         all_chords = []
-        common_utils.process_parts(metre_numerator, data, all_beats, all_chords, 'chords')
+        common_utils.process_parts(data['metre'], data, all_beats, all_chords, 'chords')
         segments = merge(to_symbolic_analysis_segments(
             common_utils.to_beat_chord_segment_list(0, duration, all_beats, all_chords),
             label_translator))
@@ -115,41 +114,32 @@ def harmonic_rhythm_for_file(anno_file_name, label_translator):
         n_beats = list(map(lambda x: x.n_beats, filter(lambda x: x.kind != labels.UNCLASSIFIED, segments)))
         return float(sum(n_beats)) / len(n_beats)
 
-def bars_for_file(anno_file_name):
+def rhythm_for_file(anno_file_name):
+    """
+    Extract rhythm annotation from the annotation.
+
+    :param anno_file_name: json annotation file name
+    :return: all_bars, all_beats, all_events, all_chords
+    all_bars[N][2] list where
+        all_bars[i][0] beginning of i-th bar,
+        all_bars[i][0] end of i-th bar
+    all_beats list of all beats times
+    all_events list of all event onset times
+    all_chords list of chords corresponding to events.
+        I.e., len(all_events) == len(all_chords)
+    """
     with open(anno_file_name) as json_file:
         data = json.load(json_file)
-        duration = float(data['duration'])
-        metre_numerator = int(data['metre'].split('/')[0])
+        # duration = float(data['duration'])
         all_events = []
         all_beats = []
         all_chords = []
         all_bars = []
-        common_utils.process_parts(metre_numerator, data, all_events, all_chords, 'chords', all_beats, all_bars)
+        common_utils.process_parts(data['metre'], data, all_events, all_chords, 'chords', all_beats, all_bars)
         # TODO: how to detect actual ending (end of the last beat)?
         # all_bars[-1][1] = duration
-        return all_bars
+        return all_bars, all_beats, all_events, all_chords
 
-
-def beats_for_file(anno_file_name):
-    with open(anno_file_name) as json_file:
-        data = json.load(json_file)
-        duration = float(data['duration'])
-        metre_numerator = int(data['metre'].split('/')[0])
-        all_events = []
-        all_beats = []
-        all_chords = []
-        common_utils.process_parts(metre_numerator, data, all_events, all_chords, 'chords', all_beats)
-        return all_beats
-
-def events_for_file(anno_file_name):
-    with open(anno_file_name) as json_file:
-        data = json.load(json_file)
-        duration = float(data['duration'])
-        metre_numerator = int(data['metre'].split('/')[0])
-        all_events = []
-        all_chords = []
-        common_utils.process_parts(metre_numerator, data, all_events, all_chords, 'chords')
-        return all_events
 
 def harmonic_rhythm_for_each_file_in_list(file_list, label_translator):
     result_by_file = {}
@@ -202,10 +192,9 @@ def estimate_statistics(file_list, label_translator, top=300, max_n_gram=2000):
         with open(infile) as json_file:
             data = json.load(json_file)
             duration = float(data['duration'])
-            metre_numerator = int(data['metre'].split('/')[0])
             all_beats = []
             all_chords = []
-            common_utils.process_parts(metre_numerator, data, all_beats, all_chords, 'chords')
+            common_utils.process_parts(data['metre'], data, all_beats, all_chords, 'chords')
             segments = merge(to_symbolic_analysis_segments(
                 common_utils.to_beat_chord_segment_list(0, duration, all_beats, all_chords),
                 label_translator))

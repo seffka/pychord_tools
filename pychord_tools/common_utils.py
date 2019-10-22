@@ -50,10 +50,12 @@ def is_in_chord_mode(chords):
     return True
 
 
-def process_chords(numerator, blocks, all_bars, all_chords, all_events, all_beats):
+def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
+    numerator, denominator = [int(x) for x in metre.split('/')]
     n = 0
 
     for block in blocks:
+        # TODO: consider pickup, incomplete last bar.
         bars = block.split('|')[1:-1]
         for bar in bars:
             chords = [c for c in re.split('\s+', bar) if c != '']
@@ -79,45 +81,54 @@ def process_chords(numerator, blocks, all_bars, all_chords, all_events, all_beat
                 newchords = []
                 for c in chords:
                     newchords.extend([c] * multiplier)
-                all_chords.extend(newchords)
-                all_events.extend(beats)
+                newchords = np.array(newchords)
+                # ignore X-chords (eXtensions)
+                originals = [newchords != 'X:']
+                all_chords.extend(newchords[originals])
+                all_events.extend(beats[originals])
             else:
                 # events mode
                 bar_events = []
                 pure_chords = []
+                # position. in denominator-th durations.
                 pos = 0
                 for c in chords:
                     components = c.split(':')
                     pure_chords.append(':'.join(components[0:2]))
                     bar_events.append(pos)
-                    # TODO: supports non-4 denominators
                     if len(components) > 2:
-                        pos += 4.0 / int(components[2])
+                        pos += denominator / int(components[2])
                     else:
-                        pos += 1
-                if abs(pos - numerator) > 0.001:
-                    raise ValueError("Inapropriate bar length: " + pos)
+                        # default duration is one denominator-th.
+                        pos += 1.0
+                # TODO: consider pickup, incomplete last bar.
+                if abs(pos - numerator) > 0.01:
+                    raise ValueError("Inapropriate bar |" + bar + "| length: " + str(pos) +
+                                     ", expected: " +  str(numerator))
                 bar_events = np.array(bar_events, dtype=float)
                 conditions = []
                 funcs = []
                 for i in range(numerator):
                     conditions.append((bar_events >= i) & (bar_events < (i+1)))
                     funcs.append(lambda x, i=i: extended_beats[i] + (extended_beats[i + 1] - extended_beats[i]) * (x - float(i)))
-                all_chords.extend(pure_chords)
-                all_events.extend(np.piecewise(bar_events, conditions, funcs))
+                pure_chords = np.array(pure_chords)
+                # ignore X-chords (eXtensions)
+                originals = [pure_chords != 'X:']
+                all_chords.extend(pure_chords[originals])
+                all_events.extend(np.piecewise(bar_events, conditions, funcs)[originals])
             n += 1
 
 
-def process_parts(metre_numerator, data, events, chords, choice, beatz = None, bars = None):
+def process_parts(metre, data, events, chords, choice, beatz = None, bars = None):
     if 'parts' in data.keys():
         for part in data['parts']:
-            process_parts(metre_numerator, part, events, chords, choice, beatz, bars)
+            process_parts(metre, part, events, chords, choice, beatz, bars)
     else:
         if 'metre' in data:
-            metre_numerator = int(data['metre'].split('/')[0])
+            metre = data['metre']
         if beatz is not None:
             beatz.extend(data['beats'])
-        process_chords(metre_numerator, data[choice], bars, chords, events, data['beats'])
+        process_chords(metre, data[choice], bars, chords, events, data['beats'])
 
 
 class ChordSegment:
@@ -174,10 +185,9 @@ def json_to_lab(choice, infile, outfile):
     with open(infile, 'r') as data_file:
         data = json.load(data_file)
         duration = float(data['duration'])
-        metre_numerator = int(data['metre'].split('/')[0])
         all_beats = []
         all_chords = []
-        process_parts(metre_numerator, data, all_beats, all_chords, choice)
+        process_parts(data['metre'], data, all_beats, all_chords, choice)
         segments = merge_segments(to_beat_chord_segment_list(0, duration, all_beats, all_chords))
         with open(outfile, 'w') as content_file:
             for s in segments:
