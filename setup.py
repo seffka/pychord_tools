@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name='pychord_tools',
-    version='0.1',
+    version='0.2',
     packages=['pychord_tools'],
     url='',
     license='',
