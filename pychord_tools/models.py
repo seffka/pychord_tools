@@ -4,7 +4,7 @@ import scipy.stats
 from scipy.stats import beta
 from sklearn import preprocessing
 from sklearn.mixture import GaussianMixture
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 
 from .compositional_data import alr
 from .compositional_data import amalgamate
