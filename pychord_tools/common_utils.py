@@ -85,7 +85,7 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
                 # ignore X-chords (eXtensions)
                 originals = [newchords != 'X:']
                 all_chords.extend(newchords[originals])
-                all_events.extend(beats[originals])
+                all_events.extend(np.array(beats)[originals])
             else:
                 # events mode
                 bar_events = []
