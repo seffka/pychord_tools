@@ -83,7 +83,7 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
                     newchords.extend([c] * multiplier)
                 newchords = np.array(newchords)
                 # ignore X-chords (eXtensions)
-                originals = [newchords != 'X:']
+                originals = newchords != 'X:'
                 all_chords.extend(newchords[originals])
                 all_events.extend(np.array(beats)[originals])
             else:
@@ -113,7 +113,7 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
                     funcs.append(lambda x, i=i: extended_beats[i] + (extended_beats[i + 1] - extended_beats[i]) * (x - float(i)))
                 pure_chords = np.array(pure_chords)
                 # ignore X-chords (eXtensions)
-                originals = [pure_chords != 'X:']
+                originals = pure_chords != 'X:'
                 all_chords.extend(pure_chords[originals])
                 all_events.extend(np.piecewise(bar_events, conditions, funcs)[originals])
             n += 1
