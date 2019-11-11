@@ -63,7 +63,6 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
             if all_bars is not None:
                 if len(all_bars) > 0:
                     all_bars[-1][1] = beats[0]
-                #print('all_bars', all_bars)
                 all_bars.append([beats[0], beats[0]])
                 if len(beats) > 1:
                     all_bars[-1][1] = beats[-1] + (beats[-1] - beats[-2])
@@ -71,8 +70,11 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
             extended_beats = np.array(beats)
             if (n+1) * numerator < len(all_beats):
                 extended_beats = np.append(extended_beats, all_beats[(n+1) * numerator])
-            else:
+            elif (n+1) * numerator == len(all_beats):
+                # extrapolate last beat's duration
                 extended_beats = np.append(extended_beats, extended_beats[-1] + (extended_beats[1:]-extended_beats[:-1]).mean())
+            else:
+                raise ValueError("beats array is too short: %d. At least %d is expected" %(len(all_beats),  (n+1) * numerator))
             if is_in_chord_mode(chords):
                 divisors = all_divisors(numerator)
                 if not (len(chords) in divisors):
