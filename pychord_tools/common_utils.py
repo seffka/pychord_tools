@@ -1,6 +1,7 @@
 import json
 import re
 import numpy as np
+import math
 
 def load_file_list(list_file_name):
     result = []
@@ -52,14 +53,37 @@ def is_in_chord_mode(chords):
 
 def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
     numerator, denominator = [int(x) for x in metre.split('/')]
-    n = 0
-
+    beats_count = 0
     for block in blocks:
-        # TODO: consider pickup, incomplete last bar.
-        bars = block.split('|')[1:-1]
-        for bar in bars:
+        bars = block.split('|')
+        incompleteBars = np.repeat(False, len(bars))
+        if len(bars) > 0 and not bars[0].strip():
+            bars = bars[1:]
+            incompleteBars = incompleteBars[1:]
+        else:
+            incompleteBars[0] = True
+
+        if len(bars) > 0 and not bars[-1].strip():
+            bars = bars[:-1]
+            incompleteBars = incompleteBars[:-1]
+        else:
+            incompleteBars[-1] = True
+        for (bar, isIncomplete) in zip(bars, incompleteBars):
             chords = [c for c in re.split('\s+', bar) if c != '']
-            beats = all_beats[n*numerator:(n+1) * numerator]
+            if isIncomplete:
+                beats_in_bar = 0
+                # TODO: remove code duplication
+                for c in chords:
+                    components = c.split(':')
+                    if len(components) > 2:
+                        beats_in_bar += denominator / int(components[2])
+                    else:
+                        # default duration is one denominator-th.
+                        beats_in_bar += 1.0
+                next_beats_count = math.floor(beats_in_bar + 0.01)
+            else:
+                next_beats_count = beats_count + numerator
+            beats = all_beats[beats_count:next_beats_count]
             if all_bars is not None:
                 if len(all_bars) > 0:
                     all_bars[-1][1] = beats[0]
@@ -68,13 +92,13 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
                     all_bars[-1][1] = beats[-1] + (beats[-1] - beats[-2])
 
             extended_beats = np.array(beats)
-            if (n+1) * numerator < len(all_beats):
-                extended_beats = np.append(extended_beats, all_beats[(n+1) * numerator])
-            elif (n+1) * numerator == len(all_beats):
+            if next_beats_count < len(all_beats):
+                extended_beats = np.append(extended_beats, all_beats[next_beats_count])
+            elif next_beats_count == len(all_beats):
                 # extrapolate last beat's duration
                 extended_beats = np.append(extended_beats, extended_beats[-1] + (extended_beats[1:]-extended_beats[:-1]).mean())
             else:
-                raise ValueError("beats array is too short: %d. At least %d is expected" %(len(all_beats),  (n+1) * numerator))
+                raise ValueError("beats array is too short: %d. At least %d is expected" %(len(all_beats),  next_beats_count))
             if is_in_chord_mode(chords):
                 divisors = all_divisors(numerator)
                 if not (len(chords) in divisors):
@@ -106,14 +130,13 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
                     else:
                         # default duration is one denominator-th.
                         pos += 1.0
-                # TODO: consider pickup, incomplete last bar.
-                if abs(pos - numerator) > 0.01:
+                if not isIncomplete and abs(pos - numerator) > 0.01:
                     raise ValueError("Inapropriate bar |" + bar + "| length: " + str(pos) +
                                      ", expected: " +  str(numerator))
                 bar_events = np.array(bar_events, dtype=float)
                 conditions = []
                 funcs = []
-                for i in range(numerator):
+                for i in range(round(pos)):
                     conditions.append((bar_events >= i) & (bar_events < (i+1)))
                     funcs.append(lambda x, i=i: extended_beats[i] + (extended_beats[i + 1] - extended_beats[i]) * (x - float(i)))
                 pure_chords = np.array(pure_chords)
@@ -121,7 +144,7 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
                 originals = pure_chords != 'X:'
                 all_chords.extend(pure_chords[originals])
                 all_events.extend(np.piecewise(bar_events, conditions, funcs)[originals])
-            n += 1
+            beats_count = next_beats_count
 
 
 def process_parts(metre, data, events, chords, choice, beatz = None, bars = None):
