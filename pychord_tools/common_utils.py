@@ -80,7 +80,11 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
                     else:
                         # default duration is one denominator-th.
                         beats_in_bar += 1.0
-                next_beats_count = math.floor(beats_in_bar + 0.01)
+                if beats_in_bar < 0.01:
+                    raise ValueError("Empty incomplete bar")
+                elif beats_in_bar >= numerator:
+                    raise ValueError("Too many beats in incomplete bar: %d" % (beats_in_bar))
+                next_beats_count = beats_count + math.floor(beats_in_bar + 0.01)
             else:
                 next_beats_count = beats_count + numerator
             beats = all_beats[beats_count:next_beats_count]
@@ -148,6 +152,18 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
 
 
 def process_parts(metre, data, events, chords, choice, beatz = None, bars = None):
+    """
+    Process single stream content.
+
+    :param metre: metre string (e.g., "4/4")
+    :param data: root data element (deserialized from JSON file)
+    :param events: list of event times. To be filled by the function.
+    :param chords: list of chord names associated with the events. To be filled by the function.
+    :param choice: name of the entity with chroma events  (e.g., "chords", "modes").
+    :param beatz: list of the beats. To be filled by the function.
+    :param bars: list of the bars ([start, end] arrays). To be filled by the function.
+    :return:
+    """
     if 'parts' in data.keys():
         for part in data['parts']:
             process_parts(metre, part, events, chords, choice, beatz, bars)
@@ -157,6 +173,45 @@ def process_parts(metre, data, events, chords, choice, beatz = None, bars = None
         if beatz is not None:
             beatz.extend(data['beats'])
         process_chords(metre, data[choice], bars, chords, events, data['beats'])
+
+
+def process_single_part_stream(stream_name, metre, data, events, chords, choice, beatz, bars = None):
+    if stream_name not in chords:
+        chords[stream_name] = []
+    if stream_name not in events:
+        events[stream_name] = []
+    process_chords(metre, data[choice], bars, chords[stream_name], events[stream_name], beatz)
+
+SINGLETON_STREAM_NAME = "singleton"
+
+def process_parts_multistream(metre, data, events, chords, choice, beatz = None, bars = None):
+    """
+    Process multistream (polyphonic) content.
+    :param metre: metre string (e.g., "4/4")
+    :param data: root data element (deserialized from JSON file)
+    :param events: dict <stream name> -> <list of timestamps> of events. To be filled by the function.
+    :param chords: dict <stream name> -> <list of labels of the <choice>>
+           of chord kinds associated with the events. To be filled by the function.
+    :param choice: name of the entity with chroma events  (e.g., "chords", "modes").
+    :param beatz: list of the beats. To be filled by the function.
+    :param bars: list of the bars ([start, end] arrays). To be filled by the function.
+    :return:
+    """
+    if 'parts' in data.keys():
+        for part in data['parts']:
+            process_parts_multistream(metre, part, events, chords, choice, beatz, bars)
+    else:
+        if 'metre' in data:
+            metre = data['metre']
+        if beatz is not None:
+            beatz.extend(data['beats'])
+        bars_to_pass = bars
+        if "streams" in data:
+            for stream in data["streams"].keys():
+                process_single_part_stream(stream, metre, data["streams"][stream], events, chords, choice, beatz, bars_to_pass)
+                bars_to_pass = None
+        else:
+            process_single_part_stream(metre, data, events, chords, choice, beatz, bars)
 
 
 class ChordSegment:

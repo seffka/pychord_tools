@@ -101,6 +101,13 @@ def make_transition_c_root_part(two_grams, harmonic_rhythm, label_translator):
 
 
 def harmonic_rhythm_for_file(anno_file_name, label_translator):
+    """
+    Intended for homorhythmic pieces only.
+
+    :param anno_file_name:
+    :param label_translator:
+    :return:
+    """
     with open(anno_file_name) as json_file:
         data = json.load(json_file)
         duration = float(data['duration'])
@@ -136,6 +143,33 @@ def rhythm_for_file(anno_file_name):
         all_chords = []
         all_bars = []
         common_utils.process_parts(data['metre'], data, all_events, all_chords, 'chords', all_beats, all_bars)
+        # TODO: how to detect actual ending (end of the last beat)?
+        # all_bars[-1][1] = duration
+        return all_bars, all_beats, all_events, all_chords
+
+
+def rhythm_for_multistream_file(anno_file_name):
+    """
+    Extract rhythm annotation from the annotation.
+
+    :param anno_file_name: json annotation file name
+    :return: all_bars, all_beats, all_events, all_chords
+    all_bars[N][2] list where
+        all_bars[i][0] beginning of i-th bar,
+        all_bars[i][0] end of i-th bar
+    all_beats list of all beats times
+    all_events dict <stream> -> <of all event onset times>
+    all_chords dict <stream> -> <chords corresponding to events>
+        I.e., len(all_events) == len(all_chords)
+    """
+    with open(anno_file_name) as json_file:
+        data = json.load(json_file)
+        # duration = float(data['duration'])
+        all_events = {}
+        all_beats = []
+        all_chords = {}
+        all_bars = []
+        common_utils.process_parts_multistream(data['metre'], data, all_events, all_chords, 'chords', all_beats, all_bars)
         # TODO: how to detect actual ending (end of the last beat)?
         # all_bars[-1][1] = duration
         return all_bars, all_beats, all_events, all_chords
@@ -179,6 +213,17 @@ class SymbolicStatistics:
 
 @cacher.memory.cache
 def estimate_statistics(file_list, label_translator, top=300, max_n_gram=2000):
+    """
+    Implemented for JAAH dataset. Assuming:
+       * homorhythm (single chords stream)
+       * maj, min, dom, dim, hdim chord types
+
+    :param file_list:
+    :param label_translator:
+    :param top:
+    :param max_n_gram:
+    :return:
+    """
     all_labels = np.array([], dtype='object')
     all_kinds = np.array([], dtype='object')
     all_roots = np.array([], dtype='object')
