@@ -208,10 +208,10 @@ def process_parts_multistream(metre, data, events, chords, choice, beatz = None,
         bars_to_pass = bars
         if "streams" in data:
             for stream in data["streams"].keys():
-                process_single_part_stream(stream, metre, data["streams"][stream], events, chords, choice, beatz, bars_to_pass)
+                process_single_part_stream(stream, metre, data["streams"][stream], events, chords, choice, data['beats'], bars_to_pass)
                 bars_to_pass = None
         else:
-            process_single_part_stream(metre, data, events, chords, choice, beatz, bars)
+            process_single_part_stream(metre, data, events, chords, choice, data['beats'], bars)
 
 
 class ChordSegment:
