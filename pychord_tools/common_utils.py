@@ -102,6 +102,8 @@ def process_chords(metre, blocks, all_bars, all_chords, all_events, all_beats):
                 # extrapolate last beat's duration
                 extended_beats = np.append(extended_beats, extended_beats[-1] + (extended_beats[1:]-extended_beats[:-1]).mean())
             else:
+                print("beats array:")
+                print(all_beats)
                 raise ValueError("beats array is too short: %d. At least %d is expected" %(len(all_beats),  next_beats_count))
             if is_in_chord_mode(chords):
                 divisors = all_divisors(numerator)
